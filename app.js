@@ -1,6 +1,8 @@
 // ==================== 상태 관리 ====================
-let count = parseInt(localStorage.getItem('counter_val') || '0', 10);
-let step = parseInt(localStorage.getItem('counter_step') || '1', 10);
+// 탑승 및 하차 상태 분리 관리 (차내 인원 = 총 탑승 - 총 하차)
+let totalBoarding = parseInt(localStorage.getItem('counter_boarding') || localStorage.getItem('counter_val') || '0', 10);
+let totalAlighting = parseInt(localStorage.getItem('counter_alighting') || '0', 10);
+const step = 1; // 터치 증감 단위는 1로 고정
 let unit = localStorage.getItem('counter_unit') || '명';
 let capacity = parseInt(localStorage.getItem('counter_capacity') || '44', 10); // 기본 44석, 0이면 제한없음
 let soundEnabled = localStorage.getItem('counter_sound') !== 'false';
@@ -17,9 +19,10 @@ try {
 
 // 정류장 구간(Lap) 관리 상태
 let currentStopIndex = parseInt(localStorage.getItem('counter_stop_idx') || '1', 10);
-let currentStopBaseCount = parseInt(localStorage.getItem('counter_stop_base') || '0', 10);
-let stopsHistory = [];
+let currentStopBaseBoarding = parseInt(localStorage.getItem('counter_stop_base_boarding') || localStorage.getItem('counter_stop_base') || '0', 10);
+let currentStopBaseAlighting = parseInt(localStorage.getItem('counter_stop_base_alighting') || '0', 10);
 
+let stopsHistory = [];
 try {
   stopsHistory = JSON.parse(localStorage.getItem('counter_stops') || '[]');
   if (!Array.isArray(stopsHistory)) stopsHistory = [];
@@ -35,22 +38,30 @@ try {
   historyList = [];
 }
 
+// 화면 꺼짐 방지 (Wake Lock) 상태
+let wakeLock = null;
+let isWakeLockRequested = localStorage.getItem('counter_wakelock') === 'true';
+
 // ==================== DOM 요소 ====================
 const counterBox = document.getElementById('counterBox');
 const counterValueEl = document.getElementById('counterValue');
 const unitLabelEl = document.getElementById('unitLabel');
 const tapAreaEl = document.getElementById('tapArea');
+const totalBoardingText = document.getElementById('totalBoardingText');
+const totalAlightingText = document.getElementById('totalAlightingText');
+
 const btnPlus = document.getElementById('btnPlus');
+const btnAlight = document.getElementById('btnAlight');
 const btnMinus = document.getElementById('btnMinus');
 const btnReset = document.getElementById('btnReset');
 const btnSound = document.getElementById('btnSound');
 const btnVibrate = document.getElementById('btnVibrate');
+const btnWakeLock = document.getElementById('btnWakeLock');
 const btnSaveTop = document.getElementById('btnSaveTop');
 
 // 좌석 현황 관련 DOM
 const capacityStatusCard = document.getElementById('capacityStatusCard');
 const seatBadge = document.getElementById('seatBadge');
-const progressFill = document.getElementById('progressFill');
 const statusBanner = document.getElementById('statusBanner');
 
 // 정류장 타임라인 관련 DOM
@@ -88,7 +99,6 @@ const inputCustomCapacity = document.getElementById('inputCustomCapacity');
 const unitChips = document.querySelectorAll('#unitChips .chip-btn');
 const customUnitRow = document.getElementById('customUnitRow');
 const inputCustomUnit = document.getElementById('inputCustomUnit');
-const stepChips = document.querySelectorAll('#stepChips .chip-btn');
 const inputCustomStopNames = document.getElementById('inputCustomStopNames');
 const presetTagBtns = document.querySelectorAll('.preset-tag-btn');
 
@@ -160,9 +170,9 @@ function animateConfetti() {
     ctxConfetti.save();
     ctxConfetti.translate(p.x, p.y);
     ctxConfetti.rotate((p.rotation * Math.PI) / 180);
-    ctxConfetti.globalAlpha = Math.max(0, p.opacity);
     ctxConfetti.fillStyle = p.color;
-    ctxConfetti.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 1.3);
+    ctxConfetti.globalAlpha = Math.max(0, p.opacity);
+    ctxConfetti.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
     ctxConfetti.restore();
   }
 
@@ -173,15 +183,13 @@ function animateConfetti() {
   }
 }
 
-// ==================== Web Audio API 사운드 ====================
+// ==================== 오디오 / 진동 시스템 ====================
 let audioCtx = null;
 
 function getAudioContext() {
   if (!audioCtx) {
     const AudioContextClass = window.AudioContext || window.webkitAudioContext;
-    if (AudioContextClass) {
-      audioCtx = new AudioContextClass();
-    }
+    if (AudioContextClass) audioCtx = new AudioContextClass();
   }
   if (audioCtx && audioCtx.state === 'suspended') {
     audioCtx.resume();
@@ -211,6 +219,21 @@ function playTone(type) {
 
       osc.start(now);
       osc.stop(now + 0.08);
+    } else if (type === 'alight') {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(620, now);
+      osc.frequency.exponentialRampToValueAtTime(420, now + 0.09);
+
+      gain.gain.setValueAtTime(0.22, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.09);
+
+      osc.start(now);
+      osc.stop(now + 0.09);
     } else if (type === 'minus') {
       const osc = ctx.createOscillator();
       const gain = ctx.createGain();
@@ -301,6 +324,8 @@ function triggerVibrate(type) {
   try {
     if (type === 'plus') {
       navigator.vibrate(18);
+    } else if (type === 'alight') {
+      navigator.vibrate(22);
     } else if (type === 'minus') {
       navigator.vibrate(28);
     } else if (type === 'overflow') {
@@ -328,6 +353,68 @@ function showToast(message) {
   }, 2200);
 }
 
+// ==================== 화면 꺼짐 방지 (Wake Lock) 시스템 ====================
+async function requestWakeLock() {
+  if ('wakeLock' in navigator) {
+    try {
+      wakeLock = await navigator.wakeLock.request('screen');
+      btnWakeLock.classList.add('wake-active');
+      isWakeLockRequested = true;
+      localStorage.setItem('counter_wakelock', 'true');
+      wakeLock.addEventListener('release', () => {
+        if (!isWakeLockRequested) {
+          btnWakeLock.classList.remove('wake-active');
+        }
+      });
+      return true;
+    } catch (err) {
+      console.log('Wake Lock request error:', err);
+      btnWakeLock.classList.remove('wake-active');
+      return false;
+    }
+  }
+  return false;
+}
+
+async function releaseWakeLock() {
+  isWakeLockRequested = false;
+  localStorage.setItem('counter_wakelock', 'false');
+  if (wakeLock !== null) {
+    try {
+      await wakeLock.release();
+    } catch (e) {}
+    wakeLock = null;
+  }
+  btnWakeLock.classList.remove('wake-active');
+}
+
+async function toggleWakeLock() {
+  if (!('wakeLock' in navigator)) {
+    showToast('현재 브라우저에서는 화면 꺼짐 방지 API를 지원하지 않습니다.');
+    return;
+  }
+
+  if (isWakeLockRequested) {
+    await releaseWakeLock();
+    showToast('🌙 화면 꺼짐 방지가 해제되었습니다.');
+  } else {
+    const success = await requestWakeLock();
+    if (success) {
+      playTone('save');
+      showToast('☀️ 화면 켜짐이 유지됩니다 (운행 중 절전 방지)');
+    } else {
+      showToast('화면 켜짐 유지를 활성화할 수 없습니다.');
+    }
+  }
+}
+
+// 화면으로 돌아왔을 때 Wake Lock 자동 복원
+document.addEventListener('visibilitychange', async () => {
+  if (isWakeLockRequested && document.visibilityState === 'visible') {
+    await requestWakeLock();
+  }
+});
+
 // ==================== 정류장 구간(Lap) 관리 ====================
 function getStopName(idx) {
   if (customStopNames && customStopNames.length > 0 && idx <= customStopNames.length) {
@@ -338,15 +425,22 @@ function getStopName(idx) {
 
 function saveStopsToStorage() {
   localStorage.setItem('counter_stop_idx', currentStopIndex.toString());
-  localStorage.setItem('counter_stop_base', currentStopBaseCount.toString());
+  localStorage.setItem('counter_stop_base_boarding', currentStopBaseBoarding.toString());
+  localStorage.setItem('counter_stop_base_alighting', currentStopBaseAlighting.toString());
   localStorage.setItem('counter_stops', JSON.stringify(stopsHistory));
 }
 
 function updateStopsUI() {
-  const curStopPassengers = Math.max(0, count - currentStopBaseCount);
+  const curStopBoarding = Math.max(0, totalBoarding - currentStopBaseBoarding);
+  const curStopAlighting = Math.max(0, totalAlighting - currentStopBaseAlighting);
   const curName = getStopName(currentStopIndex);
+
   currentStopName.textContent = curName;
-  currentStopCount.textContent = `+${curStopPassengers}${unit} 탑승 중`;
+  let stopCountText = `+${curStopBoarding}명`;
+  if (curStopAlighting > 0) {
+    stopCountText += ` / -${curStopAlighting}명`;
+  }
+  currentStopCount.textContent = stopCountText;
   nextStopBtnText.textContent = `[${curName} 완료] 다음 정류장 ➔`;
 
   if (stopsHistory.length === 0) {
@@ -354,74 +448,108 @@ function updateStopsUI() {
     return;
   }
 
-  stopsChipList.innerHTML = stopsHistory.map(item => `
-    <div class="stop-chip highlight">
-      <span>${item.stopName}:</span>
-      <span class="chip-count">+${item.count}${unit}</span>
-    </div>
-  `).join('');
+  stopsChipList.innerHTML = stopsHistory.map(item => {
+    let chipDetail = `+${item.boarding || item.count || 0}${unit}`;
+    if (item.alighting && item.alighting > 0) {
+      chipDetail += ` (-${item.alighting})`;
+    }
+    return `
+      <div class="stop-chip highlight">
+        <span>${item.stopName}:</span>
+        <span class="chip-count">${chipDetail}</span>
+      </div>
+    `;
+  }).join('');
 
   stopsChipList.scrollLeft = stopsChipList.scrollWidth;
 }
 
 // 다음 정류장으로 넘어가기 (Lap 확정)
 function nextStop() {
-  const stopCount = Math.max(0, count - currentStopBaseCount);
+  const curStopBoarding = Math.max(0, totalBoarding - currentStopBaseBoarding);
+  const curStopAlighting = Math.max(0, totalAlighting - currentStopBaseAlighting);
+  const currentOnboard = Math.max(0, totalBoarding - totalAlighting);
   const recordedStopName = getStopName(currentStopIndex);
 
   stopsHistory.push({
     stopIndex: currentStopIndex,
     stopName: recordedStopName,
-    count: stopCount,
-    cumulativeCount: count
+    boarding: curStopBoarding,
+    alighting: curStopAlighting,
+    count: curStopBoarding,
+    onboard: currentOnboard
   });
 
   currentStopIndex++;
-  currentStopBaseCount = count;
+  currentStopBaseBoarding = totalBoarding;
+  currentStopBaseAlighting = totalAlighting;
   saveStopsToStorage();
 
   playTone('save');
   triggerVibrate('save');
   updateStopsUI();
 
-  showToast(`${recordedStopName}: ${stopCount}${unit} 탑승 완료!`);
+  let toastMsg = `${recordedStopName}: 탑승 +${curStopBoarding}${unit}`;
+  if (curStopAlighting > 0) toastMsg += `, 하차 -${curStopAlighting}${unit}`;
+  toastMsg += ` (차내 ${currentOnboard}명)`;
+  showToast(toastMsg);
 }
 
-// 탑승 보고서 텍스트 생성 (진행 중 문구 제외)
-function generateReportText(stopsData, totalCount, capVal, unitStr) {
+// 탑승/하차 보고서 텍스트 생성 (진행 중 문구 제외)
+function generateReportText(stopsData, boardingCount, alightingCount, capVal, unitStr) {
   const stops = stopsData || stopsHistory;
-  const total = typeof totalCount === 'number' ? totalCount : count;
+  const totBoard = typeof boardingCount === 'number' ? boardingCount : totalBoarding;
+  const totAlight = typeof alightingCount === 'number' ? alightingCount : totalAlighting;
+  const currentOnboard = Math.max(0, totBoard - totAlight);
   const cap = typeof capVal === 'number' ? capVal : capacity;
   const u = unitStr || unit;
 
-  let report = `[🚌 버스 탑승 보고]\n`;
+  let report = `[🚌 버스 탑승/하차 보고]\n`;
   if (stops.length > 0) {
     stops.forEach(s => {
-      report += `• ${s.stopName}: ${s.count}${u}\n`;
+      const b = s.boarding !== undefined ? s.boarding : (s.count || 0);
+      const a = s.alighting || 0;
+      let line = `• ${s.stopName}: 탑승 ${b}${u}`;
+      if (a > 0) {
+        line += `, 하차 ${a}${u}`;
+      }
+      if (s.onboard !== undefined) {
+        line += ` (차내 ${s.onboard}명)`;
+      }
+      report += `${line}\n`;
     });
   }
 
-  // 아직 정류장 전환 전인 현재 정류장 인원도 깔끔하게 표기
-  const currentOngoing = Math.max(0, total - currentStopBaseCount);
-  if (currentOngoing > 0 || stops.length === 0) {
-    report += `• ${getStopName(currentStopIndex)}: ${currentOngoing}${u}\n`;
+  // 현재 정류장 인원도 깔끔하게 표기 (진행 중 문구 없이 표기)
+  const currentOngoingBoard = Math.max(0, totBoard - currentStopBaseBoardBoarding());
+  const currentOngoingAlight = Math.max(0, totAlight - currentStopBaseAlighting);
+  if (currentOngoingBoard > 0 || currentOngoingAlight > 0 || stops.length === 0) {
+    let curLine = `• ${getStopName(currentStopIndex)}: 탑승 ${currentOngoingBoard}${u}`;
+    if (currentOngoingAlight > 0) curLine += `, 하차 ${currentOngoingAlight}${u}`;
+    curLine += ` (차내 ${currentOnboard}명)\n`;
+    report += curLine;
   }
 
   report += `--------------------\n`;
+  report += `총 탑승: ${totBoard}${u} | 총 하차: ${totAlight}${u}\n`;
   if (cap > 0) {
-    const rem = cap - total;
+    const rem = cap - currentOnboard;
     if (rem > 0) {
-      report += `총 탑승: ${total} / ${cap}${u} (잔여 ${rem}석)`;
+      report += `현재 차내: ${currentOnboard} / ${cap}${u} (잔여 ${rem}석)`;
     } else if (rem === 0) {
-      report += `총 탑승: ${total} / ${cap}${u} (만석)`;
+      report += `현재 차내: ${currentOnboard} / ${cap}${u} (만석)`;
     } else {
-      report += `총 탑승: ${total} / ${cap}${u} (⚠️ 초과 +${Math.abs(rem)}${u})`;
+      report += `현재 차내: ${currentOnboard} / ${cap}${u} (⚠️ 초과 +${Math.abs(rem)}${u})`;
     }
   } else {
-    report += `총 탑승: ${total}${u}`;
+    report += `현재 차내: ${currentOnboard}${u} (제한 없음)`;
   }
 
   return report;
+}
+
+function currentStopBaseBoardBoarding() {
+  return currentStopBaseBoarding;
 }
 
 // 클립보드에 복사하기
@@ -449,10 +577,18 @@ async function copyToClipboard(text) {
 }
 
 // ==================== UI 업데이트 & 테마 전환 ====================
-function updateDisplay(animationType, prevCount) {
-  counterValueEl.textContent = count.toLocaleString();
+function updateDisplay(animationType, prevOnboard) {
+  const currentOnboard = Math.max(0, totalBoarding - totalAlighting);
+
+  counterValueEl.textContent = currentOnboard.toLocaleString();
   unitLabelEl.textContent = unit;
-  localStorage.setItem('counter_val', count.toString());
+
+  if (totalBoardingText) totalBoardingText.textContent = totalBoarding.toLocaleString();
+  if (totalAlightingText) totalAlightingText.textContent = totalAlighting.toLocaleString();
+
+  localStorage.setItem('counter_boarding', totalBoarding.toString());
+  localStorage.setItem('counter_alighting', totalAlighting.toString());
+  localStorage.setItem('counter_val', currentOnboard.toString());
 
   counterValueEl.classList.remove('pulse-up', 'pulse-down');
   void counterValueEl.offsetWidth;
@@ -466,17 +602,14 @@ function updateDisplay(animationType, prevCount) {
 
   if (capacity > 0) {
     capacityStatusCard.style.display = 'block';
-    const percent = Math.min(100, Math.max(0, (count / capacity) * 100));
-    progressFill.style.width = `${percent}%`;
+    const remaining = capacity - currentOnboard;
 
-    const remaining = capacity - count;
-
-    if (count === 0) {
-      seatBadge.textContent = `잔여 ${capacity}석 (0/${capacity})`;
-      statusBanner.textContent = `화면을 탭하여 인원 추가`;
-    } else if (count < capacity) {
-      const ratio = count / capacity;
-      seatBadge.textContent = `잔여 ${remaining}석 (${count}/${capacity})`;
+    if (currentOnboard === 0) {
+      seatBadge.textContent = `잔여 ${capacity}석 (차내 0명 / 정원 ${capacity}명)`;
+      statusBanner.textContent = `화면을 탭하여 탑승 추가`;
+    } else if (currentOnboard < capacity) {
+      const ratio = currentOnboard / capacity;
+      seatBadge.textContent = `잔여 ${remaining}석 (차내 ${currentOnboard}명 / 정원 ${capacity}명)`;
       statusBanner.textContent = `만석까지 ${remaining}${unit} 남음`;
 
       if (ratio >= 0.75) {
@@ -484,12 +617,12 @@ function updateDisplay(animationType, prevCount) {
       } else if (ratio >= 0.5) {
         document.body.classList.add('theme-warning');
       }
-    } else if (count === capacity) {
+    } else if (currentOnboard === capacity) {
       document.body.classList.add('theme-full');
-      seatBadge.textContent = `만석 (${count}/${capacity})`;
-      statusBanner.textContent = `🎉 만석 달성! (${count}${unit} 탑승)`;
+      seatBadge.textContent = `만석 (차내 ${currentOnboard}명 / 정원 ${capacity}명)`;
+      statusBanner.textContent = `🎉 만석 달성! (${currentOnboard}${unit} 탑승)`;
 
-      if (typeof prevCount === 'number' && prevCount < capacity) {
+      if (typeof prevOnboard === 'number' && prevOnboard < capacity) {
         launchConfettiExplosion();
         playTone('fanfare');
         triggerVibrate('fanfare');
@@ -497,48 +630,70 @@ function updateDisplay(animationType, prevCount) {
       }
     } else {
       document.body.classList.add('theme-overflow');
-      const overflowCount = count - capacity;
-      seatBadge.textContent = `⚠️ 초과 +${overflowCount}${unit} (${count}/${capacity})`;
+      const overflowCount = currentOnboard - capacity;
+      seatBadge.textContent = `⚠️ 초과 +${overflowCount}${unit} (차내 ${currentOnboard}명 / 정원 ${capacity}명)`;
       statusBanner.textContent = `⚠️ 정원 초과 탑승 (+${overflowCount}${unit})`;
     }
   } else {
-    capacityStatusCard.style.display = 'none';
-    statusBanner.textContent = `현재 누적: ${count.toLocaleString()}${unit}`;
+    capacityStatusCard.style.display = 'block';
+    seatBadge.textContent = `차내 ${currentOnboard}${unit} (정원 무제한)`;
+    statusBanner.textContent = `현재 차내 인원: ${currentOnboard.toLocaleString()}${unit}`;
   }
 
   updateStopsUI();
 }
 
-// 카운트 증가
-function increment(e) {
-  const prevCount = count;
-  count += step;
+// 1. 탑승 인원 추가 (+1)
+function addBoarding(e) {
+  const prevOnboard = Math.max(0, totalBoarding - totalAlighting);
+  totalBoarding += step;
+  const newOnboard = Math.max(0, totalBoarding - totalAlighting);
 
-  if (capacity > 0 && count > capacity) {
+  if (capacity > 0 && newOnboard > capacity) {
     playTone('warning');
     triggerVibrate('overflow');
-  } else if (capacity > 0 && count === capacity && prevCount < capacity) {
-    // 만석 도달 처리
+  } else if (capacity > 0 && newOnboard === capacity && prevOnboard < capacity) {
+    // 만석 도달 시 updateDisplay 내부에서 폭죽 실행
   } else {
     playTone('plus');
     triggerVibrate('plus');
   }
 
-  updateDisplay('plus', prevCount);
+  updateDisplay('plus', prevOnboard);
 
   if (e && e.clientX && e.clientY) {
     createRipple(e);
   }
 }
 
-// 카운트 감소
-function decrement() {
-  if (count <= 0) return;
-  const prevCount = count;
-  count = Math.max(0, count - step);
+// 2. 하차 인원 추가 (+1)
+function addAlighting() {
+  const prevOnboard = Math.max(0, totalBoarding - totalAlighting);
+  if (prevOnboard <= 0) {
+    showToast('현재 차내에 탑승 인원이 없습니다 (0명).');
+    playTone('warning');
+    triggerVibrate('minus');
+    return;
+  }
+
+  totalAlighting += step;
+  playTone('alight');
+  triggerVibrate('alight');
+  updateDisplay('minus', prevOnboard);
+  showToast(`하차 1명 추가 (현재 차내: ${Math.max(0, totalBoarding - totalAlighting)}명)`);
+}
+
+// 3. 탑승 정정 감소 (-1)
+function decrementBoarding() {
+  if (totalBoarding <= 0) {
+    showToast('정정할 탑승 내역이 없습니다.');
+    return;
+  }
+  const prevOnboard = Math.max(0, totalBoarding - totalAlighting);
+  totalBoarding = Math.max(0, totalBoarding - step);
   playTone('minus');
   triggerVibrate('minus');
-  updateDisplay('minus', prevCount);
+  updateDisplay('minus', prevOnboard);
 }
 
 // 리플 효과
@@ -563,12 +718,10 @@ function createRipple(e) {
 // ==================== 설정 모달 로직 ====================
 let tempCapacity = capacity;
 let tempUnit = unit;
-let tempStep = step;
 
 function openSettingsModal() {
   tempCapacity = capacity;
   tempUnit = unit;
-  tempStep = step;
 
   // 1. 좌석 칩 동기화
   let capFound = false;
@@ -610,12 +763,7 @@ function openSettingsModal() {
     inputCustomUnit.value = '';
   }
 
-  // 3. 증감 칩 동기화
-  stepChips.forEach(chip => {
-    chip.classList.toggle('active', parseInt(chip.dataset.step, 10) === step);
-  });
-
-  // 4. 노선 정류장명 동기화
+  // 3. 노선 정류장명 목록 동기화
   if (inputCustomStopNames) {
     inputCustomStopNames.value = customStopNames.join(', ');
   }
@@ -628,51 +776,50 @@ function closeSettingsModal() {
 }
 
 function saveSettings() {
-  // 좌석 수 직접 입력 반영
-  if (customCapacityRow.style.display !== 'none' && inputCustomCapacity.value) {
-    const customVal = parseInt(inputCustomCapacity.value, 10);
-    if (!isNaN(customVal) && customVal > 0) {
-      tempCapacity = customVal;
-    }
+  // 좌석 수 저장
+  const customChip = document.querySelector('#capacityChips [data-capacity="custom"]');
+  if (customChip && customChip.classList.contains('active')) {
+    const val = parseInt(inputCustomCapacity.value.trim(), 10);
+    tempCapacity = (!isNaN(val) && val > 0) ? val : 44;
   }
   capacity = tempCapacity;
   localStorage.setItem('counter_capacity', capacity.toString());
 
-  // 단위 직접 입력 반영
-  if (customUnitRow.style.display !== 'none' && inputCustomUnit.value.trim()) {
-    tempUnit = inputCustomUnit.value.trim();
+  // 단위 저장
+  const customUnitChip = document.querySelector('#unitChips [data-unit="custom"]');
+  if (customUnitChip && customUnitChip.classList.contains('active')) {
+    const uVal = inputCustomUnit.value.trim();
+    tempUnit = uVal ? uVal : '명';
   }
   unit = tempUnit;
   localStorage.setItem('counter_unit', unit);
 
-  // 증감 반영
-  step = tempStep;
-  localStorage.setItem('counter_step', step.toString());
-
-  // 노선 정류장명 반영
+  // 정류장명 저장
   if (inputCustomStopNames) {
-    const rawStops = inputCustomStopNames.value.split(',').map(s => s.trim()).filter(Boolean);
-    customStopNames = rawStops;
+    const rawStops = inputCustomStopNames.value.trim();
+    if (rawStops) {
+      customStopNames = rawStops.split(/[,/]+/).map(s => s.trim()).filter(Boolean);
+    } else {
+      customStopNames = [];
+    }
     localStorage.setItem('counter_route_stops', JSON.stringify(customStopNames));
   }
 
   updateDisplay();
   closeSettingsModal();
-  showToast(`설정 저장 완료 (정원: ${capacity > 0 ? capacity + '석' : '제한 없음'})`);
+  showToast('설정이 저장되었습니다.');
 }
 
-// 좌석 칩 클릭
+// 칩 선택 이벤트
 capacityChips.forEach(chip => {
   chip.addEventListener('click', (e) => {
     e.stopPropagation();
     capacityChips.forEach(c => c.classList.remove('active'));
     chip.classList.add('active');
+
     const capVal = chip.dataset.capacity;
     if (capVal === 'custom') {
       customCapacityRow.style.display = 'block';
-      if (!inputCustomCapacity.value && capacity > 0) {
-        inputCustomCapacity.value = capacity.toString();
-      }
       inputCustomCapacity.focus();
     } else {
       customCapacityRow.style.display = 'none';
@@ -686,6 +833,7 @@ unitChips.forEach(chip => {
     e.stopPropagation();
     unitChips.forEach(c => c.classList.remove('active'));
     chip.classList.add('active');
+
     const uVal = chip.dataset.unit;
     if (uVal === 'custom') {
       customUnitRow.style.display = 'block';
@@ -697,16 +845,6 @@ unitChips.forEach(chip => {
   });
 });
 
-stepChips.forEach(chip => {
-  chip.addEventListener('click', (e) => {
-    e.stopPropagation();
-    stepChips.forEach(c => c.classList.remove('active'));
-    chip.classList.add('active');
-    tempStep = parseInt(chip.dataset.step, 10);
-  });
-});
-
-// 정류장명 프리셋 태그 클릭
 presetTagBtns.forEach(btn => {
   btn.addEventListener('click', (e) => {
     e.stopPropagation();
@@ -730,32 +868,39 @@ function formatTimestamp(d) {
 
 // 상단 [저장] 버튼: 리셋 없이 현재 운행 내역을 즉시 히스토리에 보존!
 function saveTripWithoutReset() {
-  if (count === 0 && stopsHistory.length === 0) {
+  const currentOnboard = Math.max(0, totalBoarding - totalAlighting);
+  if (totalBoarding === 0 && stopsHistory.length === 0) {
     showToast('저장할 탑승 내역이 없습니다 (0명).');
     return;
   }
 
-  const ongoingCount = Math.max(0, count - currentStopBaseCount);
+  const curStopBoard = Math.max(0, totalBoarding - currentStopBaseBoarding);
+  const curStopAlight = Math.max(0, totalAlighting - currentStopBaseAlighting);
   const finalStops = [...stopsHistory];
-  if (ongoingCount > 0 || finalStops.length === 0) {
+
+  if (curStopBoard > 0 || curStopAlight > 0 || finalStops.length === 0) {
     finalStops.push({
       stopIndex: currentStopIndex,
       stopName: getStopName(currentStopIndex),
-      count: ongoingCount,
-      cumulativeCount: count
+      boarding: curStopBoard,
+      alighting: curStopAlight,
+      count: curStopBoard,
+      onboard: currentOnboard
     });
   }
 
-  let noteText = `운행 #${historyList.length + 1} (${finalStops.length}개 정류장)`;
+  let noteText = `운행 #${historyList.length + 1} (${finalStops.length}개 정류장, 차내 ${currentOnboard}${unit})`;
   if (capacity > 0) {
-    if (count === capacity) noteText += ' [만석]';
-    else if (count > capacity) noteText += ` [초과 +${count - capacity}]`;
-    else noteText += ` [잔여 ${capacity - count}석]`;
+    if (currentOnboard === capacity) noteText += ' [만석]';
+    else if (currentOnboard > capacity) noteText += ` [초과 +${currentOnboard - capacity}]`;
+    else noteText += ` [잔여 ${capacity - currentOnboard}석]`;
   }
 
   const newRecord = {
     id: Date.now(),
-    count: count,
+    boarding: totalBoarding,
+    alighting: totalAlighting,
+    count: currentOnboard,
     unit: unit,
     capacity: capacity,
     timestamp: formatTimestamp(new Date()),
@@ -769,37 +914,44 @@ function saveTripWithoutReset() {
 
   playTone('save');
   triggerVibrate('save');
-  showToast(`💾 현재 운행 내역이 히스토리에 저장되었습니다! (총 ${count}${unit})`);
+  showToast(`💾 현재 운행 내역이 히스토리에 저장되었습니다! (탑승 ${totalBoarding}${unit}, 차내 ${currentOnboard}${unit})`);
 }
 
 // 전체 운행 저장 후 초기화
 function saveTripAndReset() {
-  if (count === 0 && stopsHistory.length === 0) {
+  const currentOnboard = Math.max(0, totalBoarding - totalAlighting);
+  if (totalBoarding === 0 && stopsHistory.length === 0) {
     confirmResetOnly();
     return;
   }
 
-  const ongoingCount = Math.max(0, count - currentStopBaseCount);
+  const curStopBoard = Math.max(0, totalBoarding - currentStopBaseBoarding);
+  const curStopAlight = Math.max(0, totalAlighting - currentStopBaseAlighting);
   const finalStops = [...stopsHistory];
-  if (ongoingCount > 0 || finalStops.length === 0) {
+
+  if (curStopBoard > 0 || curStopAlight > 0 || finalStops.length === 0) {
     finalStops.push({
       stopIndex: currentStopIndex,
       stopName: getStopName(currentStopIndex),
-      count: ongoingCount,
-      cumulativeCount: count
+      boarding: curStopBoard,
+      alighting: curStopAlight,
+      count: curStopBoard,
+      onboard: currentOnboard
     });
   }
 
-  let noteText = `운행 #${historyList.length + 1} (${finalStops.length}개 정류장)`;
+  let noteText = `운행 #${historyList.length + 1} (${finalStops.length}개 정류장, 차내 ${currentOnboard}${unit})`;
   if (capacity > 0) {
-    if (count === capacity) noteText += ' [만석]';
-    else if (count > capacity) noteText += ` [초과 +${count - capacity}]`;
-    else noteText += ` [잔여 ${capacity - count}석]`;
+    if (currentOnboard === capacity) noteText += ' [만석]';
+    else if (currentOnboard > capacity) noteText += ` [초과 +${currentOnboard - capacity}]`;
+    else noteText += ` [잔여 ${capacity - currentOnboard}석]`;
   }
 
   const newRecord = {
     id: Date.now(),
-    count: count,
+    boarding: totalBoarding,
+    alighting: totalAlighting,
+    count: currentOnboard,
     unit: unit,
     capacity: capacity,
     timestamp: formatTimestamp(new Date()),
@@ -812,9 +964,11 @@ function saveTripAndReset() {
   updateHistoryUI();
 
   // 리셋
-  count = 0;
+  totalBoarding = 0;
+  totalAlighting = 0;
   currentStopIndex = 1;
-  currentStopBaseCount = 0;
+  currentStopBaseBoarding = 0;
+  currentStopBaseAlighting = 0;
   stopsHistory = [];
   saveStopsToStorage();
 
@@ -835,8 +989,8 @@ function updateHistoryUI() {
     historyBadge.style.display = 'none';
   }
 
-  const totalSum = historyList.reduce((acc, cur) => acc + (cur.count || 0), 0);
-  historySummaryEl.textContent = `총 ${countLen}회 운행 (누적 탑승: ${totalSum.toLocaleString()}${unit})`;
+  const totalBoardSum = historyList.reduce((acc, cur) => acc + (cur.boarding !== undefined ? cur.boarding : (cur.count || 0)), 0);
+  historySummaryEl.textContent = `총 ${countLen}회 운행 (누적 탑승: ${totalBoardSum.toLocaleString()}${unit})`;
 
   if (countLen === 0) {
     historyListEl.innerHTML = `
@@ -856,12 +1010,18 @@ function updateHistoryUI() {
     const tripNum = countLen - idx;
     const itemUnit = item.unit || unit;
     const stopsArray = Array.isArray(item.stops) ? item.stops : [];
+    const itemBoard = item.boarding !== undefined ? item.boarding : (item.count || 0);
+    const itemAlight = item.alighting || 0;
 
     const stopsDetailHtml = stopsArray.length > 0 ? `
       <div class="card-stops-detail">
-        ${stopsArray.map(s => `
-          <span class="card-stop-badge">${s.stopName}: <strong>+${s.count}${itemUnit}</strong></span>
-        `).join('')}
+        ${stopsArray.map(s => {
+          const b = s.boarding !== undefined ? s.boarding : (s.count || 0);
+          const a = s.alighting || 0;
+          let txt = `${s.stopName}: +${b}`;
+          if (a > 0) txt += `, -${a}`;
+          return `<span class="card-stop-badge">${txt}</span>`;
+        }).join('')}
       </div>
     ` : '';
 
@@ -876,7 +1036,7 @@ function updateHistoryUI() {
             </div>
           </div>
           <div class="card-right">
-            <span class="session-count">${(item.count || 0).toLocaleString()}<span class="session-unit">${itemUnit}</span></span>
+            <span class="session-count">탑승 ${itemBoard.toLocaleString()}<span class="session-unit">${itemUnit}</span></span>
             <button class="item-action-btn copy-item-btn" data-id="${item.id}" title="탑승 보고서 복사" aria-label="보고서 복사">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -932,9 +1092,11 @@ function closeResetModal() {
 }
 
 function confirmResetOnly() {
-  count = 0;
+  totalBoarding = 0;
+  totalAlighting = 0;
   currentStopIndex = 1;
-  currentStopBaseCount = 0;
+  currentStopBaseBoarding = 0;
+  currentStopBaseAlighting = 0;
   stopsHistory = [];
   saveStopsToStorage();
 
@@ -973,22 +1135,27 @@ function toggleVibrate() {
 // ==================== 이벤트 리스너 ====================
 tapAreaEl.addEventListener('click', (e) => {
   if (e.target.closest('.session-bar') || e.target.closest('.capacity-status-card') || e.target.closest('.stops-timeline-card')) return;
-  increment(e);
+  addBoarding(e);
 });
 
 btnPlus.addEventListener('click', (e) => {
   e.stopPropagation();
-  increment();
+  addBoarding();
+});
+
+btnAlight.addEventListener('click', (e) => {
+  e.stopPropagation();
+  addAlighting();
 });
 
 btnMinus.addEventListener('click', (e) => {
   e.stopPropagation();
-  decrement();
+  decrementBoarding();
 });
 
 btnReset.addEventListener('click', (e) => {
   e.stopPropagation();
-  if (count === 0 && stopsHistory.length === 0 && historyList.length === 0) return;
+  if (totalBoarding === 0 && totalAlighting === 0 && stopsHistory.length === 0 && historyList.length === 0) return;
   openResetModal();
 });
 
@@ -1008,6 +1175,11 @@ btnSound.addEventListener('click', (e) => {
 btnVibrate.addEventListener('click', (e) => {
   e.stopPropagation();
   toggleVibrate();
+});
+
+btnWakeLock.addEventListener('click', (e) => {
+  e.stopPropagation();
+  toggleWakeLock();
 });
 
 // 상단 즉시 저장 버튼
@@ -1071,7 +1243,7 @@ historyListEl.addEventListener('click', (e) => {
     const id = parseInt(copyBtn.dataset.id, 10);
     const item = historyList.find(h => h.id === id);
     if (item) {
-      const reportText = generateReportText(item.stops, item.count, item.capacity, item.unit);
+      const reportText = generateReportText(item.stops, item.boarding, item.alighting, item.capacity, item.unit);
       copyToClipboard(reportText);
     }
     return;
@@ -1115,10 +1287,13 @@ window.addEventListener('keydown', (e) => {
 
   if (e.code === 'Space' || e.key === 'ArrowUp' || e.key === '+') {
     e.preventDefault();
-    increment();
-  } else if (e.key === 'ArrowDown' || e.key === '-') {
+    addBoarding();
+  } else if (e.key === 'ArrowDown') {
     e.preventDefault();
-    decrement();
+    addAlighting();
+  } else if (e.key === '-') {
+    e.preventDefault();
+    decrementBoarding();
   } else if (e.key === 'n' || e.key === 'N') {
     e.preventDefault();
     nextStop();
@@ -1138,12 +1313,17 @@ window.addEventListener('keydown', (e) => {
 });
 
 // 초기화
-(function init() {
+(async function init() {
   updateDisplay();
   btnSound.classList.toggle('active', soundEnabled);
   btnVibrate.classList.toggle('active', vibrateEnabled);
   updateHistoryUI();
   updateStopsUI();
+
+  // 이전 세션에서 Wake Lock을 켜두었다면 자동 시도
+  if (isWakeLockRequested) {
+    await requestWakeLock();
+  }
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => {

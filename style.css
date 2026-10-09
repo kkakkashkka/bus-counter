@@ -124,6 +124,13 @@ html, body {
   box-shadow: 0 0 12px rgba(56, 189, 248, 0.15);
 }
 
+.icon-btn.wake-active {
+  color: #fbbf24 !important;
+  border-color: rgba(245, 158, 11, 0.5) !important;
+  box-shadow: 0 0 14px rgba(245, 158, 11, 0.35) !important;
+  background: rgba(245, 158, 11, 0.15) !important;
+}
+
 .icon {
   width: 20px;
   height: 20px;
@@ -160,64 +167,11 @@ html, body {
   transition: background 0.4s ease;
 }
 
-/* 버스 좌석 진행 현황 카드 */
-.capacity-status-card {
-  width: 100%;
-  background: rgba(30, 41, 59, 0.6);
-  border: 1px solid var(--border-color);
-  border-radius: 16px;
-  padding: 12px 16px;
-  backdrop-filter: blur(8px);
-  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.25);
-  transition: border-color 0.3s, box-shadow 0.3s;
-}
-
-.status-meta {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 8px;
-}
-
-.status-tag {
-  font-size: 0.78rem;
-  font-weight: 600;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-}
-
-.seat-badge {
-  font-size: 0.82rem;
-  font-weight: 700;
-  padding: 3px 10px;
-  border-radius: 20px;
-  background: rgba(56, 189, 248, 0.15);
-  color: #38bdf8;
-  border: 1px solid rgba(56, 189, 248, 0.25);
-  transition: all 0.3s ease;
-}
-
-.progress-track {
-  width: 100%;
-  height: 8px;
-  background: rgba(15, 23, 42, 0.7);
-  border-radius: 6px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, #38bdf8, #2563eb);
-  border-radius: 6px;
-  transition: width 0.25s cubic-bezier(0.4, 0, 0.2, 1), background 0.3s ease;
-}
-
-/* 정류장 구간 랩 타임라인 카드 */
+/* 정류장 구간 랩 타임라인 카드 (상단 첫 번째 배치) */
 .stops-timeline-card {
   width: 100%;
-  margin-top: 10px;
+  margin-top: 0;
+  margin-bottom: 8px;
   background: rgba(15, 23, 42, 0.75);
   border: 1px solid rgba(56, 189, 248, 0.2);
   border-radius: 14px;
@@ -225,6 +179,38 @@ html, body {
   backdrop-filter: blur(8px);
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
   z-index: 5;
+}
+
+/* 버스 잔여석 전용 미니 카드 (슬라이더/탑승현황 레이블 제거) */
+.capacity-status-card {
+  width: 100%;
+  background: rgba(30, 41, 59, 0.5);
+  border: 1px solid var(--border-color);
+  border-radius: 12px;
+  padding: 8px 14px;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  margin-bottom: 6px;
+  transition: all 0.3s ease;
+}
+
+.seat-badge-wrapper {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+}
+
+.seat-badge {
+  font-size: 0.88rem;
+  font-weight: 700;
+  padding: 4px 16px;
+  border-radius: 20px;
+  background: rgba(56, 189, 248, 0.12);
+  color: #38bdf8;
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  letter-spacing: -0.01em;
+  transition: all 0.3s ease;
 }
 
 .stops-header {
@@ -352,6 +338,34 @@ html, body {
   width: 100%;
   margin: auto 0;
   z-index: 2;
+}
+
+.counter-sub-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: rgba(15, 23, 42, 0.65);
+  padding: 4px 14px;
+  border-radius: 20px;
+  border: 1px solid var(--border-color);
+}
+
+.sub-stat-in strong {
+  color: #38bdf8;
+  font-weight: 800;
+}
+
+.sub-stat-out strong {
+  color: #fb923c;
+  font-weight: 800;
+}
+
+.sub-stat-sep {
+  opacity: 0.4;
 }
 
 .counter-wrapper {
@@ -552,11 +566,11 @@ html, body {
   height: 18px;
 }
 
-/* 하단 컨트롤러 */
+/* 하단 컨트롤러 (슬림 높이 + 하차 버튼 지원) */
 .controls {
   display: flex;
-  gap: 14px;
-  padding: 16px 20px 24px;
+  gap: 10px;
+  padding: 10px 16px 16px;
   background-color: rgba(11, 17, 32, 0.95);
   border-top: 1px solid var(--border-color);
   backdrop-filter: blur(12px);
@@ -564,16 +578,16 @@ html, body {
 }
 
 .ctrl-btn {
-  flex: 1;
-  height: 80px;
+  height: 52px;
   border: none;
-  border-radius: 24px;
+  border-radius: 16px;
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 6px;
   cursor: pointer;
   transition: transform 0.1s ease, box-shadow 0.2s ease, filter 0.2s ease;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
 }
 
 .ctrl-btn:active {
@@ -581,26 +595,48 @@ html, body {
 }
 
 .ctrl-btn svg {
-  width: 36px;
-  height: 36px;
+  width: 20px;
+  height: 20px;
+  flex-shrink: 0;
 }
 
+.ctrl-btn-text {
+  font-size: 0.92rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+}
+
+/* 1. 정정 (-1) 버튼 */
 .minus-btn {
-  flex: 0.75;
-  background: var(--surface-color);
+  flex: 0.8;
+  background: rgba(30, 41, 59, 0.8);
   color: #f87171;
-  border: 1px solid rgba(239, 68, 68, 0.25);
+  border: 1px solid rgba(239, 68, 68, 0.3);
 }
 
 .minus-btn:active {
   background: var(--surface-hover);
 }
 
+/* 2. 하차 (+1) 버튼 */
+.alight-btn {
+  flex: 1.0;
+  background: rgba(245, 158, 11, 0.16);
+  color: #fbbf24;
+  border: 1px solid rgba(245, 158, 11, 0.38);
+}
+
+.alight-btn:active {
+  background: rgba(245, 158, 11, 0.28);
+}
+
+/* 3. 탑승 (+1) 버튼 */
 .plus-btn {
-  flex: 1.4;
+  flex: 1.3;
   background: linear-gradient(135deg, #0284c7, #2563eb);
   color: #ffffff;
-  box-shadow: 0 8px 24px var(--accent-glow);
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  box-shadow: 0 4px 16px var(--accent-glow);
 }
 
 .plus-btn:active {

@@ -1,22 +1,27 @@
 {
-  "name": "깔끔 카운터",
-  "short_name": "카운터",
-  "description": "광고 없는 순수하고 쾌적한 모바일 웹 카운터",
+  "id": "./index.html",
+  "name": "버스 승차 카운터",
+  "short_name": "버스카운터",
+  "description": "광고 없는 순수하고 쾌적한 버스 승하차 인원 스마트 카운터",
   "start_url": "./index.html",
+  "scope": "./",
   "display": "standalone",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
+  "display_override": ["standalone", "minimal-ui"],
+  "background_color": "#0b1120",
+  "theme_color": "#0b1120",
   "orientation": "portrait",
   "icons": [
     {
       "src": "icons/icon-192.png",
       "sizes": "192x192",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any"
     },
     {
       "src": "icons/icon-512.png",
       "sizes": "512x512",
-      "type": "image/png"
+      "type": "image/png",
+      "purpose": "any maskable"
     },
     {
       "src": "icons/icon.svg",

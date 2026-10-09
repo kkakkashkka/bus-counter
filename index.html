@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <meta name="theme-color" content="#0f172a">
   <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <meta name="apple-mobile-web-app-title" content="버스 승차 카운터">
   <meta name="description" content="광고 없는 버스 탑승 인원 및 다목적 스마트 카운터">
@@ -46,6 +47,19 @@
             <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
           </svg>
         </button>
+        <button id="btnWakeLock" class="icon-btn" title="화면 꺼짐 방지 (Wake Lock) 토글" aria-label="화면 켜짐 유지">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"></circle>
+            <line x1="12" y1="1" x2="12" y2="3"></line>
+            <line x1="12" y1="21" x2="12" y2="23"></line>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+            <line x1="1" y1="12" x2="3" y2="12"></line>
+            <line x1="21" y1="12" x2="23" y2="12"></line>
+            <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+            <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+          </svg>
+        </button>
         <button id="btnSound" class="icon-btn active" title="소리 토글" aria-label="소리 토글">
           <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
@@ -72,24 +86,13 @@
 
     <!-- 카운터 메인 영역 (터치 탭 영역) -->
     <main class="main-display" id="tapArea">
-      <!-- 상단 좌석 현황 게이지 바 -->
-      <div class="capacity-status-card" id="capacityStatusCard">
-        <div class="status-meta">
-          <span class="status-tag" id="statusTag">탑승 현황</span>
-          <span class="seat-badge" id="seatBadge">잔여 44석 (0/44)</span>
-        </div>
-        <div class="progress-track">
-          <div class="progress-fill" id="progressFill" style="width: 0%;"></div>
-        </div>
-      </div>
-
-      <!-- 정류장 구간 랩 타임라인 바 (화면 상단 표기) -->
+      <!-- 1. 정류장 구간 랩 타임라인 바 (요청대로 잔여석 위로 이동) -->
       <div class="stops-timeline-card" id="stopsTimelineCard">
         <div class="stops-header">
           <div class="current-stop-info">
             <span class="stop-dot"></span>
             <span class="current-stop-name" id="currentStopName">1정류장</span>
-            <span class="current-stop-count" id="currentStopCount">+0명 탑승 중</span>
+            <span class="current-stop-count" id="currentStopCount">+0명</span>
           </div>
           <button id="btnQuickCopy" class="mini-action-btn" title="현재까지 탑승 내역 클립보드 복사" aria-label="클립보드 복사">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
@@ -105,18 +108,30 @@
         </div>
       </div>
 
-      <!-- 메인 카운터 디스플레이 (초대형 폰트) -->
+      <!-- 2. 잔여석 전용 카드 (탑승현황 레이블 및 슬라이더 제거하고 잔여석만 남김) -->
+      <div class="capacity-status-card" id="capacityStatusCard">
+        <div class="seat-badge-wrapper">
+          <span class="seat-badge" id="seatBadge">잔여 44석 (차내 0명 / 정원 44명)</span>
+        </div>
+      </div>
+
+      <!-- 3. 메인 카운터 디스플레이 (초대형 폰트) -->
       <div class="counter-box" id="counterBox">
+        <div class="counter-sub-info" id="counterSubInfo">
+          <span class="sub-stat-in">총 탑승 <strong id="totalBoardingText">0</strong>명</span>
+          <span class="sub-stat-sep">•</span>
+          <span class="sub-stat-out">총 하차 <strong id="totalAlightingText">0</strong>명</span>
+        </div>
         <div class="counter-wrapper">
           <div class="counter-value" id="counterValue">0</div>
           <span class="unit-label" id="unitLabel">명</span>
         </div>
-        <div class="status-banner" id="statusBanner">화면을 탭하여 인원 추가</div>
+        <div class="status-banner" id="statusBanner">화면을 탭하여 탑승 추가</div>
       </div>
 
-      <!-- 정류장 완료 & 클립보드 복사 바 -->
+      <!-- 4. 정류장 완료 바 -->
       <div class="session-bar">
-        <button id="btnNextStop" class="save-lap-btn highlight-lap" title="이번 정류장 탑승 인원 확정 및 다음 정류장으로 이동">
+        <button id="btnNextStop" class="save-lap-btn highlight-lap" title="이번 정류장 승하차 인원 확정 및 다음 정류장으로 이동">
           <svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="9 18 15 12 9 6"></polyline>
           </svg>
@@ -125,23 +140,34 @@
       </div>
     </main>
 
-    <!-- 하단 컨트롤 버튼 영역 -->
+    <!-- 하단 컨트롤 버튼 영역 (슬림한 높이 + 하차 기능 지원) -->
     <footer class="controls">
-      <button id="btnMinus" class="ctrl-btn minus-btn" aria-label="감소">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+      <button id="btnMinus" class="ctrl-btn minus-btn" title="탑승 인원 -1 정정" aria-label="탑승 정정 감소">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <line x1="5" y1="12" x2="19" y2="12"></line>
         </svg>
+        <span class="ctrl-btn-text">정정</span>
       </button>
 
-      <button id="btnPlus" class="ctrl-btn plus-btn" aria-label="증가">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+      <button id="btnAlight" class="ctrl-btn alight-btn" title="하차 인원 1명 추가" aria-label="하차 추가">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+          <path d="M16 17l5-5-5-5"></path>
+          <path d="M21 12H9"></path>
+          <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+        </svg>
+        <span class="ctrl-btn-text">하차 +1</span>
+      </button>
+
+      <button id="btnPlus" class="ctrl-btn plus-btn" title="탑승 인원 1명 추가 (화면 터치도 동일)" aria-label="탑승 추가">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
           <line x1="12" y1="5" x2="12" y2="19"></line>
           <line x1="5" y1="12" x2="19" y2="12"></line>
         </svg>
+        <span class="ctrl-btn-text">탑승 +1</span>
       </button>
     </footer>
 
-    <!-- 설정 모달 (좌석수, 단위, 증감) -->
+    <!-- 설정 모달 (좌석수, 단위, 노선) -->
     <div class="modal-backdrop" id="settingsModal">
       <div class="modal-dialog settings-dialog">
         <div class="modal-header">
@@ -188,21 +214,7 @@
             </div>
           </div>
 
-          <!-- 3. 증감 단위 설정 -->
-          <div class="setting-group">
-            <label class="setting-label">
-              <span>➕ 터치 시 증감 단위</span>
-              <span class="setting-subtext">기본값 1</span>
-            </label>
-            <div class="chip-selector" id="stepChips">
-              <button class="chip-btn active" data-step="1">1</button>
-              <button class="chip-btn" data-step="2">2</button>
-              <button class="chip-btn" data-step="5">5</button>
-              <button class="chip-btn" data-step="10">10</button>
-            </div>
-          </div>
-
-          <!-- 4. 노선 정류장명 등록 -->
+          <!-- 3. 노선 정류장명 등록 -->
           <div class="setting-group">
             <label class="setting-label">
               <span>🚏 노선 정류장명 등록 (선택)</span>

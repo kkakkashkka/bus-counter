@@ -1,4 +1,4 @@
-const CACHE_NAME = 'clean-counter-v6';
+const CACHE_NAME = 'bus-counter-v7';
 const ASSETS = [
   './',
   './index.html',
