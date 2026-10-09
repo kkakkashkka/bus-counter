@@ -38,6 +38,9 @@ try {
   historyList = [];
 }
 
+// 실행 취소 (Undo) 스택 (최대 30개 행동 기억)
+const undoStack = [];
+
 // 화면 꺼짐 방지 (Wake Lock) 상태
 let wakeLock = null;
 let isWakeLockRequested = localStorage.getItem('counter_wakelock') === 'true';
@@ -53,6 +56,7 @@ const totalAlightingText = document.getElementById('totalAlightingText');
 const btnPlus = document.getElementById('btnPlus');
 const btnAlight = document.getElementById('btnAlight');
 const btnMinus = document.getElementById('btnMinus');
+const btnUndo = document.getElementById('btnUndo');
 const btnReset = document.getElementById('btnReset');
 const btnSound = document.getElementById('btnSound');
 const btnVibrate = document.getElementById('btnVibrate');
@@ -344,6 +348,7 @@ function triggerVibrate(type) {
 
 function showToast(message) {
   if (!toastEl) return;
+  toastEl.className = 'toast';
   toastEl.textContent = message;
   toastEl.classList.add('show');
 
@@ -351,6 +356,84 @@ function showToast(message) {
   toastTimer = setTimeout(() => {
     toastEl.classList.remove('show');
   }, 2200);
+}
+
+function showToastWithAction(message, actionText, actionCallback) {
+  if (!toastEl) return;
+  toastEl.className = 'toast has-action';
+  toastEl.innerHTML = `<span>${message}</span><button class="toast-action-btn" id="toastActionBtn">${actionText}</button>`;
+  toastEl.classList.add('show');
+
+  const actionBtn = document.getElementById('toastActionBtn');
+  if (actionBtn) {
+    actionBtn.onclick = (e) => {
+      e.stopPropagation();
+      toastEl.classList.remove('show');
+      if (actionCallback) actionCallback();
+    };
+  }
+
+  if (toastTimer) clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => {
+    toastEl.classList.remove('show');
+  }, 4000);
+}
+
+// ==================== 실행 취소 (Undo) 시스템 ====================
+function pushUndoState(actionType) {
+  undoStack.push({
+    actionType: actionType || 'action',
+    totalBoarding,
+    totalAlighting,
+    currentStopIndex,
+    currentStopBaseBoarding,
+    currentStopBaseAlighting,
+    stopsHistory: JSON.parse(JSON.stringify(stopsHistory))
+  });
+  if (undoStack.length > 100) undoStack.shift();
+  updateUndoBtnUI();
+}
+
+function updateUndoBtnUI() {
+  if (!btnUndo) return;
+  if (undoStack.length > 0) {
+    btnUndo.style.opacity = '1';
+    btnUndo.style.pointerEvents = 'auto';
+  } else {
+    btnUndo.style.opacity = '0.5';
+    btnUndo.style.pointerEvents = 'none';
+  }
+}
+
+function undo() {
+  if (undoStack.length === 0) {
+    showToast('되돌릴 이전 행동이 없습니다.');
+    return;
+  }
+
+  const prev = undoStack.pop();
+  const wasNextStop = prev.actionType === 'next_stop';
+
+  totalBoarding = prev.totalBoarding;
+  totalAlighting = prev.totalAlighting;
+  currentStopIndex = prev.currentStopIndex;
+  currentStopBaseBoarding = prev.currentStopBaseBoarding;
+  currentStopBaseAlighting = prev.currentStopBaseAlighting;
+  stopsHistory = prev.stopsHistory;
+
+  saveStopsToStorage();
+  updateDisplay('minus');
+  updateStopsUI();
+  updateUndoBtnUI();
+
+  playTone('minus');
+  triggerVibrate('minus');
+
+  if (wasNextStop) {
+    showToast(`↶ 직전 정류장(${getStopName(currentStopIndex)})으로 복원되었습니다!`);
+  } else {
+    showToast('↶ 직전 행동을 되돌렸습니다.');
+  }
 }
 
 // ==================== 화면 꺼짐 방지 (Wake Lock) 시스템 ====================
@@ -466,6 +549,8 @@ function updateStopsUI() {
 
 // 다음 정류장으로 넘어가기 (Lap 확정)
 function nextStop() {
+  pushUndoState('next_stop');
+
   const curStopBoarding = Math.max(0, totalBoarding - currentStopBaseBoarding);
   const curStopAlighting = Math.max(0, totalAlighting - currentStopBaseAlighting);
   const currentOnboard = Math.max(0, totalBoarding - totalAlighting);
@@ -489,67 +574,49 @@ function nextStop() {
   triggerVibrate('save');
   updateStopsUI();
 
-  let toastMsg = `${recordedStopName}: 탑승 +${curStopBoarding}${unit}`;
-  if (curStopAlighting > 0) toastMsg += `, 하차 -${curStopAlighting}${unit}`;
-  toastMsg += ` (차내 ${currentOnboard}명)`;
-  showToast(toastMsg);
+  let toastMsg = `${recordedStopName} 완료 ➔ ${getStopName(currentStopIndex)}`;
+  showToastWithAction(toastMsg, '↶ 되돌리기', () => undo());
 }
 
-// 탑승/하차 보고서 텍스트 생성 (진행 중 문구 제외)
+// 탑승 보고서 텍스트 생성 (사용자 요청: 차내 N명 제거, 만석/잔여석 제거, 총 탑승 N명만 표기)
 function generateReportText(stopsData, boardingCount, alightingCount, capVal, unitStr) {
   const stops = stopsData || stopsHistory;
   const totBoard = typeof boardingCount === 'number' ? boardingCount : totalBoarding;
   const totAlight = typeof alightingCount === 'number' ? alightingCount : totalAlighting;
-  const currentOnboard = Math.max(0, totBoard - totAlight);
-  const cap = typeof capVal === 'number' ? capVal : capacity;
   const u = unitStr || unit;
 
-  let report = `[🚌 버스 탑승/하차 보고]\n`;
+  let report = `[🚌 버스 탑승 보고]\n`;
   if (stops.length > 0) {
     stops.forEach(s => {
       const b = s.boarding !== undefined ? s.boarding : (s.count || 0);
       const a = s.alighting || 0;
-      let line = `• ${s.stopName}: 탑승 ${b}${u}`;
       if (a > 0) {
-        line += `, 하차 ${a}${u}`;
+        report += `• ${s.stopName}: 탑승 ${b}${u}, 하차 ${a}${u}\n`;
+      } else {
+        report += `• ${s.stopName}: ${b}${u}\n`;
       }
-      if (s.onboard !== undefined) {
-        line += ` (차내 ${s.onboard}명)`;
-      }
-      report += `${line}\n`;
     });
   }
 
-  // 현재 정류장 인원도 깔끔하게 표기 (진행 중 문구 없이 표기)
-  const currentOngoingBoard = Math.max(0, totBoard - currentStopBaseBoardBoarding());
+  // 현재 정류장 인원도 깔끔하게 표기 (진행 중 문구 제외)
+  const currentOngoingBoard = Math.max(0, totBoard - currentStopBaseBoarding);
   const currentOngoingAlight = Math.max(0, totAlight - currentStopBaseAlighting);
   if (currentOngoingBoard > 0 || currentOngoingAlight > 0 || stops.length === 0) {
-    let curLine = `• ${getStopName(currentStopIndex)}: 탑승 ${currentOngoingBoard}${u}`;
-    if (currentOngoingAlight > 0) curLine += `, 하차 ${currentOngoingAlight}${u}`;
-    curLine += ` (차내 ${currentOnboard}명)\n`;
-    report += curLine;
+    if (currentOngoingAlight > 0) {
+      report += `• ${getStopName(currentStopIndex)}: 탑승 ${currentOngoingBoard}${u}, 하차 ${currentOngoingAlight}${u}\n`;
+    } else {
+      report += `• ${getStopName(currentStopIndex)}: ${currentOngoingBoard}${u}\n`;
+    }
   }
 
   report += `--------------------\n`;
-  report += `총 탑승: ${totBoard}${u} | 총 하차: ${totAlight}${u}\n`;
-  if (cap > 0) {
-    const rem = cap - currentOnboard;
-    if (rem > 0) {
-      report += `현재 차내: ${currentOnboard} / ${cap}${u} (잔여 ${rem}석)`;
-    } else if (rem === 0) {
-      report += `현재 차내: ${currentOnboard} / ${cap}${u} (만석)`;
-    } else {
-      report += `현재 차내: ${currentOnboard} / ${cap}${u} (⚠️ 초과 +${Math.abs(rem)}${u})`;
-    }
+  if (totAlight > 0) {
+    report += `총 탑승: ${totBoard}${u} (하차 ${totAlight}${u})`;
   } else {
-    report += `현재 차내: ${currentOnboard}${u} (제한 없음)`;
+    report += `총 탑승: ${totBoard}${u}`;
   }
 
   return report;
-}
-
-function currentStopBaseBoardBoarding() {
-  return currentStopBaseBoarding;
 }
 
 // 클립보드에 복사하기
@@ -641,10 +708,13 @@ function updateDisplay(animationType, prevOnboard) {
   }
 
   updateStopsUI();
+  updateUndoBtnUI();
 }
 
 // 1. 탑승 인원 추가 (+1)
 function addBoarding(e) {
+  pushUndoState('boarding');
+
   const prevOnboard = Math.max(0, totalBoarding - totalAlighting);
   totalBoarding += step;
   const newOnboard = Math.max(0, totalBoarding - totalAlighting);
@@ -676,6 +746,7 @@ function addAlighting() {
     return;
   }
 
+  pushUndoState('alighting');
   totalAlighting += step;
   playTone('alight');
   triggerVibrate('alight');
@@ -689,6 +760,7 @@ function decrementBoarding() {
     showToast('정정할 탑승 내역이 없습니다.');
     return;
   }
+  pushUndoState('decrement');
   const prevOnboard = Math.max(0, totalBoarding - totalAlighting);
   totalBoarding = Math.max(0, totalBoarding - step);
   playTone('minus');
@@ -751,7 +823,6 @@ function openSettingsModal() {
   unitChips.forEach(chip => {
     const isAct = chip.dataset.unit === unit;
     chip.classList.toggle('active', isAct);
-    if (isAct) unitFound = true;
   });
 
   if (!unitFound) {
@@ -889,12 +960,7 @@ function saveTripWithoutReset() {
     });
   }
 
-  let noteText = `운행 #${historyList.length + 1} (${finalStops.length}개 정류장, 차내 ${currentOnboard}${unit})`;
-  if (capacity > 0) {
-    if (currentOnboard === capacity) noteText += ' [만석]';
-    else if (currentOnboard > capacity) noteText += ` [초과 +${currentOnboard - capacity}]`;
-    else noteText += ` [잔여 ${capacity - currentOnboard}석]`;
-  }
+  let noteText = `운행 #${historyList.length + 1} (${finalStops.length}개 정류장, 탑승 ${totalBoarding}${unit})`;
 
   const newRecord = {
     id: Date.now(),
@@ -914,7 +980,7 @@ function saveTripWithoutReset() {
 
   playTone('save');
   triggerVibrate('save');
-  showToast(`💾 현재 운행 내역이 히스토리에 저장되었습니다! (탑승 ${totalBoarding}${unit}, 차내 ${currentOnboard}${unit})`);
+  showToast(`💾 현재 운행 내역이 히스토리에 저장되었습니다! (총 탑승: ${totalBoarding}${unit})`);
 }
 
 // 전체 운행 저장 후 초기화
@@ -940,12 +1006,7 @@ function saveTripAndReset() {
     });
   }
 
-  let noteText = `운행 #${historyList.length + 1} (${finalStops.length}개 정류장, 차내 ${currentOnboard}${unit})`;
-  if (capacity > 0) {
-    if (currentOnboard === capacity) noteText += ' [만석]';
-    else if (currentOnboard > capacity) noteText += ` [초과 +${currentOnboard - capacity}]`;
-    else noteText += ` [잔여 ${capacity - currentOnboard}석]`;
-  }
+  let noteText = `운행 #${historyList.length + 1} (${finalStops.length}개 정류장, 탑승 ${totalBoarding}${unit})`;
 
   const newRecord = {
     id: Date.now(),
@@ -964,6 +1025,7 @@ function saveTripAndReset() {
   updateHistoryUI();
 
   // 리셋
+  undoStack.length = 0;
   totalBoarding = 0;
   totalAlighting = 0;
   currentStopIndex = 1;
@@ -1092,6 +1154,7 @@ function closeResetModal() {
 }
 
 function confirmResetOnly() {
+  undoStack.length = 0;
   totalBoarding = 0;
   totalAlighting = 0;
   currentStopIndex = 1;
@@ -1151,6 +1214,12 @@ btnAlight.addEventListener('click', (e) => {
 btnMinus.addEventListener('click', (e) => {
   e.stopPropagation();
   decrementBoarding();
+});
+
+// 상단 되돌리기 버튼
+btnUndo.addEventListener('click', (e) => {
+  e.stopPropagation();
+  undo();
 });
 
 btnReset.addEventListener('click', (e) => {
@@ -1294,6 +1363,12 @@ window.addEventListener('keydown', (e) => {
   } else if (e.key === '-') {
     e.preventDefault();
     decrementBoarding();
+  } else if ((e.ctrlKey || e.metaKey) && (e.key === 'z' || e.key === 'Z')) {
+    e.preventDefault();
+    undo();
+  } else if (e.key === 'u' || e.key === 'U') {
+    e.preventDefault();
+    undo();
   } else if (e.key === 'n' || e.key === 'N') {
     e.preventDefault();
     nextStop();
@@ -1319,6 +1394,7 @@ window.addEventListener('keydown', (e) => {
   btnVibrate.classList.toggle('active', vibrateEnabled);
   updateHistoryUI();
   updateStopsUI();
+  updateUndoBtnUI();
 
   // 이전 세션에서 Wake Lock을 켜두었다면 자동 시도
   if (isWakeLockRequested) {
