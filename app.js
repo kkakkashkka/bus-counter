@@ -612,9 +612,8 @@ function generateReportText(stopsData, boardingCount, alightingCount, capVal, un
   const hasRoute = Boolean(rName);
 
   if (hasRoute) {
-    // 노선명이 있는 경우: [🚌 (노선명) 인원보고 / 총 탑승 : 44명] (하차 있을 시 (하차 N명) 병기)
-    const formattedRouteName = rName.startsWith('(') && rName.endsWith(')') ? rName : `(${rName})`;
-    let header = `[🚌 ${formattedRouteName} 인원보고 / 총 탑승 : ${totBoard}${u}`;
+    // 노선명이 있는 경우: [🚌 노선명 인원보고 / 총 탑승 : 44명] (하차 있을 시 (하차 N명) 병기)
+    let header = `[🚌 ${rName} 인원보고 / 총 탑승 : ${totBoard}${u}`;
     if (totAlight > 0) {
       header += ` (하차 ${totAlight}${u})`;
     }
