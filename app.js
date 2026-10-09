@@ -17,6 +17,20 @@ try {
   customStopNames = [];
 }
 
+// 저장된 노선 목록 (localStorage 영구 저장)
+let savedRoutes = [];
+try {
+  savedRoutes = JSON.parse(localStorage.getItem('counter_saved_routes') || '[]');
+  if (!Array.isArray(savedRoutes)) savedRoutes = [];
+} catch (e) {
+  savedRoutes = [];
+}
+
+// 기본 노선 ID (localStorage)
+let defaultRouteId = localStorage.getItem('counter_default_route') || '';
+// 현재 선택된 노선 ID
+let activeRouteId = localStorage.getItem('counter_active_route') || '';
+
 // 정류장 구간(Lap) 관리 상태
 let currentStopIndex = parseInt(localStorage.getItem('counter_stop_idx') || '1', 10);
 let currentStopBaseBoarding = parseInt(localStorage.getItem('counter_stop_base_boarding') || localStorage.getItem('counter_stop_base') || '0', 10);
@@ -103,8 +117,9 @@ const inputCustomCapacity = document.getElementById('inputCustomCapacity');
 const unitChips = document.querySelectorAll('#unitChips .chip-btn');
 const customUnitRow = document.getElementById('customUnitRow');
 const inputCustomUnit = document.getElementById('inputCustomUnit');
-const inputCustomStopNames = document.getElementById('inputCustomStopNames');
-const presetTagBtns = document.querySelectorAll('.preset-tag-btn');
+const routeListEl = document.getElementById('routeList');
+const inputRouteStops = document.getElementById('inputRouteStops');
+const btnAddRoute = document.getElementById('btnAddRoute');
 
 // 토스트 및 캔버스
 const toastEl = document.getElementById('toast');
@@ -795,7 +810,10 @@ function openSettingsModal() {
   tempCapacity = capacity;
   tempUnit = unit;
 
-  // 1. 좌석 칩 동기화
+  // 1. 노선 목록 렌더링
+  renderRouteList();
+
+  // 2. 좌석 칩 동기화
   let capFound = false;
   capacityChips.forEach(chip => {
     const chipCapVal = chip.dataset.capacity;
@@ -818,11 +836,12 @@ function openSettingsModal() {
     inputCustomCapacity.value = '';
   }
 
-  // 2. 단위 칩 동기화
+  // 3. 단위 칩 동기화
   let unitFound = false;
   unitChips.forEach(chip => {
     const isAct = chip.dataset.unit === unit;
     chip.classList.toggle('active', isAct);
+    if (isAct) unitFound = true;
   });
 
   if (!unitFound) {
@@ -832,11 +851,6 @@ function openSettingsModal() {
   } else {
     customUnitRow.style.display = 'none';
     inputCustomUnit.value = '';
-  }
-
-  // 3. 노선 정류장명 목록 동기화
-  if (inputCustomStopNames) {
-    inputCustomStopNames.value = customStopNames.join(', ');
   }
 
   settingsModal.classList.add('show');
@@ -865,16 +879,7 @@ function saveSettings() {
   unit = tempUnit;
   localStorage.setItem('counter_unit', unit);
 
-  // 정류장명 저장
-  if (inputCustomStopNames) {
-    const rawStops = inputCustomStopNames.value.trim();
-    if (rawStops) {
-      customStopNames = rawStops.split(/[,/]+/).map(s => s.trim()).filter(Boolean);
-    } else {
-      customStopNames = [];
-    }
-    localStorage.setItem('counter_route_stops', JSON.stringify(customStopNames));
-  }
+  // 노선 & 정류장명은 이미 실시간 저장되므로 여기서는 추가 작업 불필요
 
   updateDisplay();
   closeSettingsModal();
@@ -916,15 +921,220 @@ unitChips.forEach(chip => {
   });
 });
 
-presetTagBtns.forEach(btn => {
-  btn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    if (inputCustomStopNames) {
-      inputCustomStopNames.value = btn.dataset.preset;
-      inputCustomStopNames.focus();
-    }
+// ==================== 노선 관리 시스템 ====================
+function generateRouteId() {
+  return 'route_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6);
+}
+
+function saveRoutesToStorage() {
+  localStorage.setItem('counter_saved_routes', JSON.stringify(savedRoutes));
+}
+
+function renderRouteList() {
+  if (!routeListEl) return;
+
+  if (savedRoutes.length === 0) {
+    routeListEl.innerHTML = '<span class="route-empty-msg">등록된 노선이 없습니다. 아래에서 노선을 등록해보세요.</span>';
+    return;
+  }
+
+  routeListEl.innerHTML = savedRoutes.map(route => {
+    const isActive = route.id === activeRouteId;
+    const isDefault = route.id === defaultRouteId;
+    let classes = 'route-chip';
+    if (isActive) classes += ' active';
+    if (isDefault) classes += ' default-route';
+
+    return `
+      <div class="${classes}" data-route-id="${route.id}">
+        ${isDefault ? '<span class="route-default-star">★</span>' : ''}
+        <span class="route-name">${route.name}</span>
+        <span class="route-stop-count">(${route.stops.length})</span>
+        <button type="button" class="route-delete-btn" data-route-id="${route.id}" title="노선 삭제">✕</button>
+      </div>
+    `;
+  }).join('');
+
+  // 클릭 이벤트: 노선 선택 (칩 클릭)
+  routeListEl.querySelectorAll('.route-chip').forEach(chip => {
+    chip.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (e.target.classList.contains('route-delete-btn')) return; // 삭제 버튼은 별도 처리
+      const routeId = chip.dataset.routeId;
+      selectRoute(routeId);
+    });
   });
-});
+
+  // 삭제 버튼 이벤트
+  routeListEl.querySelectorAll('.route-delete-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const routeId = btn.dataset.routeId;
+      deleteRoute(routeId);
+    });
+  });
+
+  // 길게 누르기: 기본 노선 설정
+  routeListEl.querySelectorAll('.route-chip').forEach(chip => {
+    let pressTimer = null;
+    chip.addEventListener('pointerdown', (e) => {
+      if (e.target.classList.contains('route-delete-btn')) return;
+      pressTimer = setTimeout(() => {
+        const routeId = chip.dataset.routeId;
+        toggleDefaultRoute(routeId);
+      }, 600);
+    });
+    chip.addEventListener('pointerup', () => clearTimeout(pressTimer));
+    chip.addEventListener('pointerleave', () => clearTimeout(pressTimer));
+    chip.addEventListener('pointercancel', () => clearTimeout(pressTimer));
+  });
+}
+
+function selectRoute(routeId) {
+  if (activeRouteId === routeId) {
+    // 이미 선택된 노선을 다시 클릭 → 해제
+    activeRouteId = '';
+    customStopNames = [];
+  } else {
+    activeRouteId = routeId;
+    const route = savedRoutes.find(r => r.id === routeId);
+    if (route) {
+      customStopNames = [...route.stops];
+    }
+  }
+  localStorage.setItem('counter_active_route', activeRouteId);
+  localStorage.setItem('counter_route_stops', JSON.stringify(customStopNames));
+  updateStopsUI();
+  renderRouteList();
+  if (activeRouteId) {
+    const route = savedRoutes.find(r => r.id === activeRouteId);
+    showToast(`🚏 노선 "${route?.name}" 적용됨`);
+  } else {
+    showToast('노선 선택이 해제되었습니다 (기본 번호 정류장)');
+  }
+}
+
+function addNewRoute() {
+  if (!inputRouteStops) return;
+  const rawText = inputRouteStops.value.trim();
+  if (!rawText) {
+    showToast('정류장명을 입력해주세요.');
+    return;
+  }
+
+  // 쉼표 또는 줄바꿈으로 분리
+  const stops = rawText.split(/[,\n]+/).map(s => s.trim()).filter(Boolean);
+  if (stops.length === 0) {
+    showToast('유효한 정류장명을 입력해주세요.');
+    return;
+  }
+
+  // 노선 이름 물어보기
+  const defaultName = stops[0] + (stops.length > 1 ? ` 외 ${stops.length - 1}개` : '');
+  const routeName = prompt('이 노선의 이름을 입력해주세요:', defaultName);
+  if (!routeName || !routeName.trim()) {
+    showToast('노선 등록이 취소되었습니다.');
+    return;
+  }
+
+  const newRoute = {
+    id: generateRouteId(),
+    name: routeName.trim(),
+    stops: stops,
+    createdAt: Date.now()
+  };
+
+  savedRoutes.push(newRoute);
+  saveRoutesToStorage();
+
+  // 자동으로 새 노선을 선택
+  activeRouteId = newRoute.id;
+  customStopNames = [...newRoute.stops];
+  localStorage.setItem('counter_active_route', activeRouteId);
+  localStorage.setItem('counter_route_stops', JSON.stringify(customStopNames));
+
+  // 만약 첫 번째 노선이면 기본값으로도 설정
+  if (savedRoutes.length === 1) {
+    defaultRouteId = newRoute.id;
+    localStorage.setItem('counter_default_route', defaultRouteId);
+  }
+
+  inputRouteStops.value = '';
+  updateStopsUI();
+  renderRouteList();
+  playTone('save');
+  showToast(`✅ 노선 "${routeName.trim()}" (${stops.length}개 정류장)이 등록되었습니다!`);
+}
+
+function deleteRoute(routeId) {
+  const route = savedRoutes.find(r => r.id === routeId);
+  if (!route) return;
+  if (!confirm(`"${route.name}" 노선을 삭제하시겠습니까?`)) return;
+
+  savedRoutes = savedRoutes.filter(r => r.id !== routeId);
+  saveRoutesToStorage();
+
+  if (activeRouteId === routeId) {
+    activeRouteId = '';
+    customStopNames = [];
+    localStorage.setItem('counter_active_route', '');
+    localStorage.setItem('counter_route_stops', JSON.stringify([]));
+    updateStopsUI();
+  }
+
+  if (defaultRouteId === routeId) {
+    defaultRouteId = '';
+    localStorage.setItem('counter_default_route', '');
+  }
+
+  renderRouteList();
+  showToast(`노선 "${route.name}"이 삭제되었습니다.`);
+}
+
+function toggleDefaultRoute(routeId) {
+  if (defaultRouteId === routeId) {
+    defaultRouteId = '';
+    localStorage.setItem('counter_default_route', '');
+    showToast('기본 노선이 해제되었습니다.');
+  } else {
+    defaultRouteId = routeId;
+    localStorage.setItem('counter_default_route', routeId);
+    const route = savedRoutes.find(r => r.id === routeId);
+    showToast(`★ "${route?.name}" 노선이 기본 노선으로 설정되었습니다!`);
+  }
+  renderRouteList();
+}
+
+// 앱 시작 시 기본 노선 자동 적용
+function applyDefaultRoute() {
+  if (activeRouteId && savedRoutes.find(r => r.id === activeRouteId)) {
+    // 이미 선택된 노선이 있고 유효하면 유지
+    const route = savedRoutes.find(r => r.id === activeRouteId);
+    if (route) {
+      customStopNames = [...route.stops];
+      localStorage.setItem('counter_route_stops', JSON.stringify(customStopNames));
+    }
+    return;
+  }
+
+  if (defaultRouteId) {
+    const route = savedRoutes.find(r => r.id === defaultRouteId);
+    if (route) {
+      activeRouteId = defaultRouteId;
+      customStopNames = [...route.stops];
+      localStorage.setItem('counter_active_route', activeRouteId);
+      localStorage.setItem('counter_route_stops', JSON.stringify(customStopNames));
+    }
+  }
+}
+
+// 노선 등록 버튼 이벤트
+if (btnAddRoute) {
+  btnAddRoute.addEventListener('click', (e) => {
+    e.stopPropagation();
+    addNewRoute();
+  });
+}
 
 // ==================== 히스토리 기록 관리 ====================
 function formatTimestamp(d) {
@@ -1389,6 +1599,9 @@ window.addEventListener('keydown', (e) => {
 
 // 초기화
 (async function init() {
+  // 기본 노선 자동 적용
+  applyDefaultRoute();
+
   updateDisplay();
   btnSound.classList.toggle('active', soundEnabled);
   btnVibrate.classList.toggle('active', vibrateEnabled);
