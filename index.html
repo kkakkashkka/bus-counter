@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0f172a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="버스 승차 카운터">
+  <meta name="description" content="광고 없는 버스 탑승 인원 및 다목적 스마트 카운터">
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
+  <link rel="apple-touch-icon" href="icons/icon-192.png">
+  <title>버스 승차 카운터</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- 폭죽 파티클 캔버스 -->
+  <canvas id="confettiCanvas"></canvas>
+
+  <div class="app-container">
+    <!-- 상단 툴바 -->
+    <header class="header">
+      <div class="title-area">
+        <span class="logo-dot"></span>
+        <h1 class="app-title" id="appTitleText">버스 인원 카운터</h1>
+      </div>
+      <div class="actions">
+        <button id="btnSaveTop" class="icon-btn" title="현재 운행 히스토리에 저장" aria-label="운행 저장">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+            <polyline points="7 3 7 8 15 8"></polyline>
+          </svg>
+        </button>
+        <button id="btnHistory" class="icon-btn" title="탑승 기록 히스토리" aria-label="기록 히스토리">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 8v4l3 3"></path>
+            <circle cx="12" cy="12" r="9"></circle>
+          </svg>
+          <span id="historyBadge" class="badge" style="display: none;">0</span>
+        </button>
+        <button id="btnSettings" class="icon-btn" title="설정 (좌석/단위/노선)" aria-label="설정">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+        <button id="btnSound" class="icon-btn active" title="소리 토글" aria-label="소리 토글">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"></polygon>
+            <path class="sound-wave" d="M15.54 8.46a5 5 0 0 1 0 7.07"></path>
+            <path class="sound-wave-outer" d="M19.07 4.93a10 10 0 0 1 0 14.14"></path>
+          </svg>
+        </button>
+        <button id="btnVibrate" class="icon-btn active" title="진동 토글" aria-label="진동 토글">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"></rect>
+            <line x1="12" y1="18" x2="12.01" y2="18"></line>
+            <path d="M1 9l2 3-2 3"></path>
+            <path d="M23 9l-2 3 2 3"></path>
+          </svg>
+        </button>
+        <button id="btnReset" class="icon-btn" title="초기화" aria-label="초기화">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path>
+            <path d="M3 3v5h5"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- 카운터 메인 영역 (터치 탭 영역) -->
+    <main class="main-display" id="tapArea">
+      <!-- 상단 좌석 현황 게이지 바 -->
+      <div class="capacity-status-card" id="capacityStatusCard">
+        <div class="status-meta">
+          <span class="status-tag" id="statusTag">탑승 현황</span>
+          <span class="seat-badge" id="seatBadge">잔여 44석 (0/44)</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" id="progressFill" style="width: 0%;"></div>
+        </div>
+      </div>
+
+      <!-- 정류장 구간 랩 타임라인 바 (화면 상단 표기) -->
+      <div class="stops-timeline-card" id="stopsTimelineCard">
+        <div class="stops-header">
+          <div class="current-stop-info">
+            <span class="stop-dot"></span>
+            <span class="current-stop-name" id="currentStopName">1정류장</span>
+            <span class="current-stop-count" id="currentStopCount">+0명 탑승 중</span>
+          </div>
+          <button id="btnQuickCopy" class="mini-action-btn" title="현재까지 탑승 내역 클립보드 복사" aria-label="클립보드 복사">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+            <span>보고 복사</span>
+          </button>
+        </div>
+        <div class="stops-chip-list" id="stopsChipList">
+          <!-- 확정된 정류장 칩들이 가로로 표시됨 -->
+          <div class="stop-chip empty-placeholder">정류장별 인원이 여기에 누적됩니다</div>
+        </div>
+      </div>
+
+      <!-- 메인 카운터 디스플레이 (초대형 폰트) -->
+      <div class="counter-box" id="counterBox">
+        <div class="counter-wrapper">
+          <div class="counter-value" id="counterValue">0</div>
+          <span class="unit-label" id="unitLabel">명</span>
+        </div>
+        <div class="status-banner" id="statusBanner">화면을 탭하여 인원 추가</div>
+      </div>
+
+      <!-- 정류장 완료 & 클립보드 복사 바 -->
+      <div class="session-bar">
+        <button id="btnNextStop" class="save-lap-btn highlight-lap" title="이번 정류장 탑승 인원 확정 및 다음 정류장으로 이동">
+          <svg class="save-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 18 15 12 9 6"></polyline>
+          </svg>
+          <span id="nextStopBtnText">다음 정류장으로 (Lap)</span>
+        </button>
+      </div>
+    </main>
+
+    <!-- 하단 컨트롤 버튼 영역 -->
+    <footer class="controls">
+      <button id="btnMinus" class="ctrl-btn minus-btn" aria-label="감소">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+      </button>
+
+      <button id="btnPlus" class="ctrl-btn plus-btn" aria-label="증가">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+      </button>
+    </footer>
+
+    <!-- 설정 모달 (좌석수, 단위, 증감) -->
+    <div class="modal-backdrop" id="settingsModal">
+      <div class="modal-dialog settings-dialog">
+        <div class="modal-header">
+          <h3>환경 설정</h3>
+          <button id="btnSettingsClose" class="close-icon-btn" aria-label="닫기">✕</button>
+        </div>
+
+        <div class="settings-content">
+          <!-- 1. 버스 좌석 수 (최대 정원) 설정 -->
+          <div class="setting-group">
+            <label class="setting-label">
+              <span>🚌 버스 좌석 수 (최대 정원)</span>
+              <span class="setting-subtext">만석 시 폭죽 및 초과 진동 경고</span>
+            </label>
+            <div class="chip-selector" id="capacityChips">
+              <button class="chip-btn" data-capacity="45">45석</button>
+              <button class="chip-btn active" data-capacity="44">44석</button>
+              <button class="chip-btn" data-capacity="31">31석</button>
+              <button class="chip-btn" data-capacity="28">28석</button>
+              <button class="chip-btn" data-capacity="25">25석</button>
+              <button class="chip-btn" data-capacity="custom">직접입력</button>
+              <button class="chip-btn" data-capacity="0">제한없음</button>
+            </div>
+            <div class="custom-input-row" id="customCapacityRow" style="display: none;">
+              <input type="number" id="inputCustomCapacity" class="setting-input" placeholder="좌석 수 직접 입력 (예: 35, 50)" min="1" max="999">
+            </div>
+          </div>
+
+          <!-- 2. 카운트 단위 설정 -->
+          <div class="setting-group">
+            <label class="setting-label">
+              <span>🏷️ 카운트 단위</span>
+              <span class="setting-subtext">숫자 뒤에 붙는 단위 표기</span>
+            </label>
+            <div class="chip-selector" id="unitChips">
+              <button class="chip-btn active" data-unit="명">명 (인원)</button>
+              <button class="chip-btn" data-unit="대">대 (차량)</button>
+              <button class="chip-btn" data-unit="개">개</button>
+              <button class="chip-btn" data-unit="회">회</button>
+              <button class="chip-btn" data-unit="custom">직접입력</button>
+            </div>
+            <div class="custom-input-row" id="customUnitRow" style="display: none;">
+              <input type="text" id="inputCustomUnit" class="setting-input" placeholder="단위 입력 (예: 건, 석, 명)" maxlength="6">
+            </div>
+          </div>
+
+          <!-- 3. 증감 단위 설정 -->
+          <div class="setting-group">
+            <label class="setting-label">
+              <span>➕ 터치 시 증감 단위</span>
+              <span class="setting-subtext">기본값 1</span>
+            </label>
+            <div class="chip-selector" id="stepChips">
+              <button class="chip-btn active" data-step="1">1</button>
+              <button class="chip-btn" data-step="2">2</button>
+              <button class="chip-btn" data-step="5">5</button>
+              <button class="chip-btn" data-step="10">10</button>
+            </div>
+          </div>
+
+          <!-- 4. 노선 정류장명 등록 -->
+          <div class="setting-group">
+            <label class="setting-label">
+              <span>🚏 노선 정류장명 등록 (선택)</span>
+              <span class="setting-subtext">쉼표(,)로 구분 시 순서대로 자동 적용 (예: 사당역, 양재역, 판교역)</span>
+            </label>
+            <input type="text" id="inputCustomStopNames" class="setting-input" placeholder="정류장명을 쉼표로 구분하여 입력">
+            <div class="preset-tag-row">
+              <button type="button" class="preset-tag-btn" data-preset="사당역, 양재역, 판교역, 정자역">수도권 예시</button>
+              <button type="button" class="preset-tag-btn" data-preset="A정류장, B정류장, C정류장, D정류장">A, B, C, D</button>
+              <button type="button" class="preset-tag-btn clear-tag" data-preset="">기본 (1정류장..)</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button id="btnSettingsSave" class="modal-btn primary">설정 저장</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 히스토리 목록 모달 (바텀시트) -->
+    <div class="modal-backdrop" id="historyModal">
+      <div class="modal-dialog history-dialog">
+        <div class="modal-header">
+          <div class="modal-title-wrap">
+            <h3>탑승 기록 히스토리</h3>
+            <span class="history-summary" id="historySummary">총 0개 기록 (합계: 0명)</span>
+          </div>
+          <button id="btnHistoryClose" class="close-icon-btn" aria-label="닫기">✕</button>
+        </div>
+
+        <div class="history-list" id="historyList">
+          <!-- 동적 렌더링 영역 -->
+        </div>
+
+        <div class="history-footer">
+          <button id="btnClearHistory" class="modal-btn secondary-danger">기록 전체 삭제</button>
+          <button id="btnHistoryDone" class="modal-btn primary">닫기</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 초기화 확인 모달 -->
+    <div class="modal-backdrop" id="resetModal">
+      <div class="modal-dialog">
+        <h3>운행을 종료하고 초기화할까요?</h3>
+        <p>정류장별 탑승 내역이 히스토리에 기록되며 카운터가 0으로 리셋됩니다.</p>
+        <div class="modal-actions-column">
+          <button id="modalSaveAndReset" class="modal-btn success">운행 저장 후 초기화</button>
+          <button id="modalConfirm" class="modal-btn danger">저장 없이 초기화</button>
+          <button id="modalCancel" class="modal-btn secondary">취소</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 토스트 알림 메시지 -->
+    <div class="toast" id="toast"></div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
