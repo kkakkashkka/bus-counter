@@ -1,9 +1,9 @@
-const CACHE_NAME = 'bus-counter-v9';
+const CACHE_NAME = 'bus-counter-v10';
 const ASSETS = [
   './',
   './index.html',
-  './style.css',
-  './app.js',
+  './style.css?v=10',
+  './app.js?v=10',
   './manifest.json',
   './icons/icon.svg',
   './icons/icon-192.png',
@@ -34,10 +34,21 @@ self.addEventListener('activate', (e) => {
   self.clients.claim();
 });
 
+// Network First 전략 (온라인 시 항상 최신 파일 로드 & 캐시 갱신, 오프라인 시 캐시 사용)
 self.addEventListener('fetch', (e) => {
   e.respondWith(
-    caches.match(e.request).then((res) => {
-      return res || fetch(e.request);
-    })
+    fetch(e.request)
+      .then((res) => {
+        if (res && res.status === 200 && e.request.method === 'GET') {
+          const resClone = res.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(e.request, resClone);
+          });
+        }
+        return res;
+      })
+      .catch(() => {
+        return caches.match(e.request, { ignoreSearch: true });
+      })
   );
 });
