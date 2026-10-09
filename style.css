@@ -1200,12 +1200,13 @@ html, body {
   border-top: 1px solid var(--border-color);
 }
 
-/* 토스트 */
+/* 토스트 (상단 잔여석 카드 아래 위치) */
 .toast {
   position: absolute;
-  bottom: 110px;
+  top: clamp(225px, 28vh, 320px);
   left: 50%;
-  transform: translateX(-50%) translateY(20px);
+  transform: translateX(-50%) translateY(-15px);
+  max-width: 90%;
   background: rgba(15, 23, 42, 0.95);
   color: #f8fafc;
   border: 1px solid rgba(56, 189, 248, 0.4);

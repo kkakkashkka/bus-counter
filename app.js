@@ -593,14 +593,38 @@ function nextStop() {
   showToastWithAction(toastMsg, '↶ 되돌리기', () => undo());
 }
 
-// 탑승 보고서 텍스트 생성 (사용자 요청: 차내 N명 제거, 만석/잔여석 제거, 총 탑승 N명만 표기)
-function generateReportText(stopsData, boardingCount, alightingCount, capVal, unitStr) {
+// 현재 활성 노선명 가져오기
+function getActiveRouteName() {
+  if (!activeRouteId) return '';
+  const route = savedRoutes.find(r => r.id === activeRouteId);
+  return route ? (route.name || '').trim() : '';
+}
+
+// 탑승 보고서 텍스트 생성 (노선 있을 시: [🚌 (노선명) 인원보고 / 총 탑승 : N명])
+function generateReportText(stopsData, boardingCount, alightingCount, capVal, unitStr, routeNameOpt) {
   const stops = stopsData || stopsHistory;
   const totBoard = typeof boardingCount === 'number' ? boardingCount : totalBoarding;
   const totAlight = typeof alightingCount === 'number' ? alightingCount : totalAlighting;
   const u = unitStr || unit;
+  const rName = typeof routeNameOpt === 'string' ? routeNameOpt.trim() : getActiveRouteName();
 
-  let report = `[🚌 버스 탑승 보고]\n`;
+  let report = '';
+  const hasRoute = Boolean(rName);
+
+  if (hasRoute) {
+    // 노선명이 있는 경우: [🚌 (노선명) 인원보고 / 총 탑승 : 44명] (하차 있을 시 (하차 N명) 병기)
+    const formattedRouteName = rName.startsWith('(') && rName.endsWith(')') ? rName : `(${rName})`;
+    let header = `[🚌 ${formattedRouteName} 인원보고 / 총 탑승 : ${totBoard}${u}`;
+    if (totAlight > 0) {
+      header += ` (하차 ${totAlight}${u})`;
+    }
+    header += `]\n`;
+    report += header;
+  } else {
+    // 노선이 없는 경우: 기존 형식 유지
+    report += `[🚌 버스 탑승 보고]\n`;
+  }
+
   if (stops.length > 0) {
     stops.forEach(s => {
       const b = s.boarding !== undefined ? s.boarding : (s.count || 0);
@@ -624,14 +648,17 @@ function generateReportText(stopsData, boardingCount, alightingCount, capVal, un
     }
   }
 
-  report += `--------------------\n`;
-  if (totAlight > 0) {
-    report += `총 탑승: ${totBoard}${u} (하차 ${totAlight}${u})`;
-  } else {
-    report += `총 탑승: ${totBoard}${u}`;
+  // 노선이 없는 경우에만 하단 구분선과 총 탑승 요약 표시
+  if (!hasRoute) {
+    report += `--------------------\n`;
+    if (totAlight > 0) {
+      report += `총 탑승: ${totBoard}${u} (하차 ${totAlight}${u})`;
+    } else {
+      report += `총 탑승: ${totBoard}${u}`;
+    }
   }
 
-  return report;
+  return report.trimEnd();
 }
 
 // 클립보드에 복사하기
@@ -1029,8 +1056,8 @@ function addNewRoute() {
     return;
   }
 
-  // 노선 이름 물어보기
-  const defaultName = stops[0] + (stops.length > 1 ? ` 외 ${stops.length - 1}개` : '');
+  // 노선 이름 물어보기 (첫 번째 정류장명을 기본값으로 설정)
+  const defaultName = stops[0] || '';
   const routeName = prompt('이 노선의 이름을 입력해주세요:', defaultName);
   if (!routeName || !routeName.trim()) {
     showToast('노선 등록이 취소되었습니다.');
@@ -1174,6 +1201,7 @@ function saveTripWithoutReset() {
 
   const newRecord = {
     id: Date.now(),
+    routeName: getActiveRouteName(),
     boarding: totalBoarding,
     alighting: totalAlighting,
     count: currentOnboard,
@@ -1220,6 +1248,7 @@ function saveTripAndReset() {
 
   const newRecord = {
     id: Date.now(),
+    routeName: getActiveRouteName(),
     boarding: totalBoarding,
     alighting: totalAlighting,
     count: currentOnboard,
@@ -1522,7 +1551,7 @@ historyListEl.addEventListener('click', (e) => {
     const id = parseInt(copyBtn.dataset.id, 10);
     const item = historyList.find(h => h.id === id);
     if (item) {
-      const reportText = generateReportText(item.stops, item.boarding, item.alighting, item.capacity, item.unit);
+      const reportText = generateReportText(item.stops, item.boarding, item.alighting, item.capacity, item.unit, item.routeName);
       copyToClipboard(reportText);
     }
     return;
