@@ -1168,8 +1168,12 @@ function formatTimestamp(d) {
   const day = dateObj.getDate().toString().padStart(2, '0');
   const hours = dateObj.getHours().toString().padStart(2, '0');
   const minutes = dateObj.getMinutes().toString().padStart(2, '0');
-  const seconds = dateObj.getSeconds().toString().padStart(2, '0');
-  return `${dateObj.getFullYear()}.${month}.${day} ${hours}:${minutes}:${seconds}`;
+  return `${dateObj.getFullYear()}.${month}.${day} ${hours}:${minutes}`;
+}
+
+function formatDisplayTimestamp(ts) {
+  if (!ts) return '';
+  return ts.replace(/:\d{2}$/, '');
 }
 
 // 상단 [저장] 버튼: 리셋 없이 현재 운행 내역을 즉시 히스토리에 보존!
@@ -1348,7 +1352,7 @@ function updateHistoryUI() {
               <div class="session-meta-row">
                 <span class="session-stop-count">${stopCountText}</span>
                 <span class="meta-dot">·</span>
-                <span class="session-time">${item.timestamp}</span>
+                <span class="session-time">${formatDisplayTimestamp(item.timestamp)}</span>
               </div>
             </div>
           </div>
