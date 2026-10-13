@@ -602,7 +602,8 @@ function getActiveRouteName() {
 
 // 탑승 보고서 텍스트 생성 (노선 있을 시: [🚌 (노선명) 인원보고 / 총 탑승 : N명])
 function generateReportText(stopsData, boardingCount, alightingCount, capVal, unitStr, routeNameOpt) {
-  const stops = stopsData || stopsHistory;
+  const isHistorical = Array.isArray(stopsData);
+  const stops = isHistorical ? stopsData : stopsHistory;
   const totBoard = typeof boardingCount === 'number' ? boardingCount : totalBoarding;
   const totAlight = typeof alightingCount === 'number' ? alightingCount : totalAlighting;
   const u = unitStr || unit;
@@ -620,8 +621,13 @@ function generateReportText(stopsData, boardingCount, alightingCount, capVal, un
     header += `]\n`;
     report += header;
   } else {
-    // 노선이 없는 경우: 기존 형식 유지
-    report += `[🚌 버스 탑승 보고]\n`;
+    // 노선이 없는 경우: [🚌 버스 인원보고 / 총 탑승 : 44명]
+    let header = `[🚌 버스 인원보고 / 총 탑승 : ${totBoard}${u}`;
+    if (totAlight > 0) {
+      header += ` (하차 ${totAlight}${u})`;
+    }
+    header += `]\n`;
+    report += header;
   }
 
   if (stops.length > 0) {
@@ -636,24 +642,17 @@ function generateReportText(stopsData, boardingCount, alightingCount, capVal, un
     });
   }
 
-  // 현재 정류장 인원도 깔끔하게 표기 (진행 중 문구 제외)
-  const currentOngoingBoard = Math.max(0, totBoard - currentStopBaseBoarding);
-  const currentOngoingAlight = Math.max(0, totAlight - currentStopBaseAlighting);
-  if (currentOngoingBoard > 0 || currentOngoingAlight > 0 || stops.length === 0) {
-    if (currentOngoingAlight > 0) {
-      report += `• ${getStopName(currentStopIndex)}: 탑승 ${currentOngoingBoard}${u}, 하차 ${currentOngoingAlight}${u}\n`;
-    } else {
-      report += `• ${getStopName(currentStopIndex)}: ${currentOngoingBoard}${u}\n`;
-    }
-  }
-
-  // 노선이 없는 경우에만 하단 구분선과 총 탑승 요약 표시
-  if (!hasRoute) {
-    report += `--------------------\n`;
-    if (totAlight > 0) {
-      report += `총 탑승: ${totBoard}${u} (하차 ${totAlight}${u})`;
-    } else {
-      report += `총 탑승: ${totBoard}${u}`;
+  // ★ 실시간 운행 중일 때만 현재 진행 중인 정류장 인원을 덧붙임
+  // (히스토리에서 복사할 때는 이미 stops에 마지막 정류장까지 온전히 포함되어 있으므로 추가하지 않음)
+  if (!isHistorical) {
+    const currentOngoingBoard = Math.max(0, totBoard - currentStopBaseBoarding);
+    const currentOngoingAlight = Math.max(0, totAlight - currentStopBaseAlighting);
+    if (currentOngoingBoard > 0 || currentOngoingAlight > 0 || stops.length === 0) {
+      if (currentOngoingAlight > 0) {
+        report += `• ${getStopName(currentStopIndex)}: 탑승 ${currentOngoingBoard}${u}, 하차 ${currentOngoingAlight}${u}\n`;
+      } else {
+        report += `• ${getStopName(currentStopIndex)}: ${currentOngoingBoard}${u}\n`;
+      }
     }
   }
 
@@ -1196,11 +1195,14 @@ function saveTripWithoutReset() {
     });
   }
 
-  let noteText = `운행 #${historyList.length + 1} (${finalStops.length}개 정류장, 탑승 ${totalBoarding}${unit})`;
+  const rName = getActiveRouteName();
+  let noteText = rName
+    ? `${rName} · ${finalStops.length}개 정류장`
+    : `운행 #${historyList.length + 1} (${finalStops.length}개 정류장, 탑승 ${totalBoarding}${unit})`;
 
   const newRecord = {
     id: Date.now(),
-    routeName: getActiveRouteName(),
+    routeName: rName,
     boarding: totalBoarding,
     alighting: totalAlighting,
     count: currentOnboard,
@@ -1217,7 +1219,8 @@ function saveTripWithoutReset() {
 
   playTone('save');
   triggerVibrate('save');
-  showToast(`💾 현재 운행 내역이 히스토리에 저장되었습니다! (총 탑승: ${totalBoarding}${unit})`);
+  const routePrefix = rName ? `[${rName}] ` : '';
+  showToast(`💾 ${routePrefix}현재 운행 내역이 히스토리에 저장되었습니다! (총 탑승: ${totalBoarding}${unit})`);
 }
 
 // 전체 운행 저장 후 초기화
@@ -1243,11 +1246,14 @@ function saveTripAndReset() {
     });
   }
 
-  let noteText = `운행 #${historyList.length + 1} (${finalStops.length}개 정류장, 탑승 ${totalBoarding}${unit})`;
+  const rName = getActiveRouteName();
+  let noteText = rName
+    ? `${rName} · ${finalStops.length}개 정류장`
+    : `운행 #${historyList.length + 1} (${finalStops.length}개 정류장, 탑승 ${totalBoarding}${unit})`;
 
   const newRecord = {
     id: Date.now(),
-    routeName: getActiveRouteName(),
+    routeName: rName,
     boarding: totalBoarding,
     alighting: totalAlighting,
     count: currentOnboard,
@@ -1277,7 +1283,8 @@ function saveTripAndReset() {
   updateDisplay();
   closeResetModal();
 
-  showToast('🚌 이번 운행 기록이 저장되고 0으로 리셋되었습니다!');
+  const routePrefix = rName ? `[${rName}] ` : '';
+  showToast(`🚌 ${routePrefix}운행 기록이 저장되고 0으로 리셋되었습니다!`);
 }
 
 function updateHistoryUI() {
@@ -1312,31 +1319,40 @@ function updateHistoryUI() {
     const stopsArray = Array.isArray(item.stops) ? item.stops : [];
     const itemBoard = item.boarding !== undefined ? item.boarding : (item.count || 0);
     const itemAlight = item.alighting || 0;
+    const itemRouteName = (item.routeName || '').trim();
+    const displayTitle = itemRouteName || `운행 #${tripNum}`;
+    const stopCountText = `${stopsArray.length}개 정류장`;
 
     const stopsDetailHtml = stopsArray.length > 0 ? `
       <div class="card-stops-detail">
         ${stopsArray.map(s => {
           const b = s.boarding !== undefined ? s.boarding : (s.count || 0);
           const a = s.alighting || 0;
-          let txt = `${s.stopName}: +${b}`;
-          if (a > 0) txt += `, -${a}`;
-          return `<span class="card-stop-badge">${txt}</span>`;
+          return `
+            <span class="card-stop-badge">
+              <span class="badge-stop-name">${s.stopName}</span>
+              <strong class="badge-board">+${b}</strong>${a > 0 ? `<span class="badge-alight">-${a}</span>` : ''}
+            </span>
+          `;
         }).join('')}
       </div>
     ` : '';
 
     return `
       <div class="history-card" data-id="${item.id}">
-        <div class="card-main-row">
-          <div class="card-left">
+        <div class="card-top-bar">
+          <div class="card-title-group">
             <span class="session-index">#${tripNum}</span>
-            <div class="session-info">
-              <span class="session-note">${item.note || '운행 기록'}</span>
-              <span class="session-time">${item.timestamp}</span>
+            <div class="session-title-wrap">
+              <div class="session-route-title" title="${displayTitle}">${displayTitle}</div>
+              <div class="session-meta-row">
+                <span class="session-stop-count">${stopCountText}</span>
+                <span class="meta-dot">·</span>
+                <span class="session-time">${item.timestamp}</span>
+              </div>
             </div>
           </div>
-          <div class="card-right">
-            <span class="session-count">탑승 ${itemBoard.toLocaleString()}<span class="session-unit">${itemUnit}</span></span>
+          <div class="card-action-group">
             <button class="item-action-btn copy-item-btn" data-id="${item.id}" title="탑승 보고서 복사" aria-label="보고서 복사">
               <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
                 <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -1351,6 +1367,20 @@ function updateHistoryUI() {
             </button>
           </div>
         </div>
+
+        <div class="card-count-banner">
+          <div class="count-tag-board">
+            <span class="count-tag-label">총 탑승</span>
+            <span class="count-tag-num">${itemBoard.toLocaleString()}<small class="count-tag-unit">${itemUnit}</small></span>
+          </div>
+          ${itemAlight > 0 ? `
+          <div class="count-tag-alight">
+            <span class="count-tag-label">하차</span>
+            <span class="count-tag-num">${itemAlight.toLocaleString()}<small class="count-tag-unit">${itemUnit}</small></span>
+          </div>
+          ` : ''}
+        </div>
+
         ${stopsDetailHtml}
       </div>
     `;
@@ -1552,6 +1582,18 @@ historyListEl.addEventListener('click', (e) => {
     if (item) {
       const reportText = generateReportText(item.stops, item.boarding, item.alighting, item.capacity, item.unit, item.routeName);
       copyToClipboard(reportText);
+
+      const origHtml = copyBtn.innerHTML;
+      copyBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#38bdf8" stroke-width="2.5">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      `;
+      copyBtn.classList.add('copied');
+      setTimeout(() => {
+        copyBtn.innerHTML = origHtml;
+        copyBtn.classList.remove('copied');
+      }, 1200);
     }
     return;
   }

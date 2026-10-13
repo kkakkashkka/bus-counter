@@ -1025,9 +1025,9 @@ html, body {
 
 /* 히스토리 모달 상세 */
 .history-dialog {
-  max-width: 420px;
+  max-width: 440px;
   width: 95%;
-  max-height: 82vh;
+  max-height: 85vh;
   display: flex;
   flex-direction: column;
   padding: 20px;
@@ -1035,117 +1035,110 @@ html, body {
 }
 
 .history-summary {
-  font-size: 0.8rem;
+  font-size: 0.82rem;
   color: var(--text-secondary);
 }
 
 .history-list {
   flex: 1;
   overflow-y: auto;
-  padding: 12px 0;
+  padding: 10px 2px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-height: 52vh;
+}
+
+/* 히스토리 카드 모던 리디자인 */
+.history-card {
+  background: linear-gradient(145deg, rgba(30, 41, 59, 0.75) 0%, rgba(15, 23, 42, 0.9) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 14px 16px;
   display: flex;
   flex-direction: column;
   gap: 10px;
-  max-height: 48vh;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  transition: transform 0.15s ease, border-color 0.15s ease;
 }
 
-.history-card {
-  background: rgba(15, 23, 42, 0.7);
-  border: 1px solid var(--border-color);
-  border-radius: 14px;
-  padding: 12px 14px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.history-card:hover {
+  border-color: rgba(56, 189, 248, 0.35);
 }
 
-.card-main-row {
+/* 카드 상단 헤더 (노선명 타이틀 & 복사/삭제 버튼) */
+.card-top-bar {
   display: flex;
   align-items: center;
   justify-content: space-between;
+  gap: 10px;
 }
 
-.card-left {
+.card-title-group {
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
 }
 
 .session-index {
   background: rgba(56, 189, 248, 0.15);
+  border: 1px solid rgba(56, 189, 248, 0.25);
   color: #38bdf8;
-  font-size: 0.75rem;
+  font-size: 0.76rem;
   font-weight: 700;
-  padding: 4px 8px;
+  padding: 3px 8px;
   border-radius: 8px;
   min-width: 32px;
   text-align: center;
+  flex-shrink: 0;
 }
 
-.session-info {
+.session-title-wrap {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-width: 0;
+  flex: 1;
 }
 
-.session-time {
-  font-size: 0.78rem;
-  color: var(--text-secondary);
+.session-route-title {
+  font-size: 0.98rem;
+  font-weight: 700;
+  color: #f8fafc;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  letter-spacing: -0.01em;
 }
 
-.session-note {
-  font-size: 0.85rem;
-  font-weight: 600;
-  color: var(--text-primary);
-}
-
-.card-right {
+.session-meta-row {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 5px;
+  font-size: 0.73rem;
+  color: #94a3b8;
+  white-space: nowrap;
 }
 
-.session-count {
-  font-size: 1.25rem;
-  font-weight: 800;
-  color: #38bdf8;
+.meta-dot {
+  color: #475569;
 }
 
-.session-unit {
-  font-size: 0.8rem;
-  font-weight: 500;
-  color: var(--text-secondary);
-  margin-left: 2px;
-}
-
-.card-stops-detail {
+.card-action-group {
   display: flex;
-  flex-wrap: wrap;
+  align-items: center;
   gap: 6px;
-  padding-top: 6px;
-  border-top: 1px dashed rgba(255, 255, 255, 0.08);
-}
-
-.card-stop-badge {
-  font-size: 0.76rem;
-  background: rgba(30, 41, 59, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  color: #cbd5e1;
-  padding: 3px 8px;
-  border-radius: 6px;
-}
-
-.card-stop-badge strong {
-  color: #38bdf8;
-  margin-left: 2px;
+  flex-shrink: 0;
 }
 
 .item-action-btn {
-  background: transparent;
-  border: none;
-  color: #64748b;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #94a3b8;
   cursor: pointer;
-  padding: 6px;
+  padding: 7px;
   border-radius: 8px;
   display: flex;
   align-items: center;
@@ -1155,29 +1148,110 @@ html, body {
 
 .item-action-btn:hover {
   color: #38bdf8;
-  background: rgba(56, 189, 248, 0.1);
+  background: rgba(56, 189, 248, 0.15);
+  border-color: rgba(56, 189, 248, 0.3);
 }
 
 .item-action-btn.delete:hover {
   color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
+  background: rgba(239, 68, 68, 0.15);
+  border-color: rgba(239, 68, 68, 0.3);
 }
 
-.delete-item-btn {
-  background: transparent;
-  border: none;
-  color: #64748b;
-  cursor: pointer;
-  padding: 6px;
-  border-radius: 8px;
+.item-action-btn.copied {
+  background: rgba(56, 189, 248, 0.2);
+  border-color: #38bdf8;
+}
+
+/* 탑승 인원 요약 배너 (글자 세로 꺾임 완전 방지 nowrap) */
+.card-count-banner {
   display: flex;
   align-items: center;
-  justify-content: center;
+  gap: 12px;
+  background: rgba(56, 189, 248, 0.06);
+  border: 1px solid rgba(56, 189, 248, 0.18);
+  border-radius: 10px;
+  padding: 7px 12px;
 }
 
-.delete-item-btn:hover {
-  color: #ef4444;
-  background: rgba(239, 68, 68, 0.1);
+.count-tag-board {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+}
+
+.count-tag-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #94a3b8;
+}
+
+.count-tag-num {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #38bdf8;
+  white-space: nowrap;
+}
+
+.count-tag-unit {
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: #94a3b8;
+  margin-left: 2px;
+}
+
+.count-tag-alight {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  white-space: nowrap;
+  padding-left: 12px;
+  border-left: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.count-tag-alight .count-tag-label {
+  color: #fb923c;
+}
+
+.count-tag-alight .count-tag-num {
+  color: #fb923c;
+}
+
+/* 정류장별 상세 칩 리스트 */
+.card-stops-detail {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding-top: 4px;
+}
+
+.card-stop-badge {
+  font-size: 0.75rem;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #cbd5e1;
+  padding: 4px 9px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.badge-stop-name {
+  color: #cbd5e1;
+  font-weight: 500;
+}
+
+.badge-board {
+  color: #38bdf8;
+  font-weight: 700;
+}
+
+.badge-alight {
+  color: #fb923c;
+  font-weight: 600;
 }
 
 .history-empty {
