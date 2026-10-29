@@ -942,6 +942,39 @@ html, body {
   box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
 }
 
+.route-chip.route-chip-none {
+  border-style: dashed;
+  border-color: rgba(148, 163, 184, 0.4);
+  color: #94a3b8;
+}
+
+.route-chip.route-chip-none:hover {
+  border-color: rgba(56, 189, 248, 0.5);
+  color: #e2e8f0;
+}
+
+.route-chip.route-chip-none.active {
+  border-style: solid;
+  background: rgba(56, 189, 248, 0.2);
+  border-color: var(--accent-color);
+  color: #38bdf8;
+  box-shadow: 0 0 10px rgba(56, 189, 248, 0.15);
+}
+
+.route-chip.route-chip-none.default-route {
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #6ee7b7;
+  background: rgba(16, 185, 129, 0.12);
+}
+
+.route-chip.route-chip-none.default-route.active {
+  border-style: solid;
+  background: rgba(16, 185, 129, 0.22);
+  border-color: #10b981;
+  color: #6ee7b7;
+  box-shadow: 0 0 10px rgba(16, 185, 129, 0.2);
+}
+
 .route-chip .route-stop-count {
   font-size: 0.7rem;
   opacity: 0.7;
