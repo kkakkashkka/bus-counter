@@ -1,4 +1,79 @@
 // ==================== 상태 관리 ====================
+// 8가지 화면 테마 설정 (localStorage: counter_theme)
+const THEMES = [
+  { id: 'default', name: '다크 네이비', desc: '세련된 기본 딥블루', bg: '#0b1120', accent: '#38bdf8' },
+  { id: 'midnight', name: '미드나잇 블랙', desc: 'OLED 완전 블랙 (심야)', bg: '#000000', accent: '#38bdf8' },
+  { id: 'light', name: '클린 라이트', desc: '주간 야외 고시인성', bg: '#f1f5f9', accent: '#0284c7' },
+  { id: 'emerald', name: '에메랄드 그린', desc: '눈이 편한 숲/대중교통', bg: '#051a11', accent: '#10b981' },
+  { id: 'sunset', name: '웜 선셋', desc: '따뜻한 오렌지/야간', bg: '#180e06', accent: '#f97316' },
+  { id: 'purple', name: '네온 바이올렛', desc: '모던 사이버 퍼플', bg: '#10061c', accent: '#a855f7' },
+  { id: 'ocean', name: '딥 오션 틸', desc: '심해 청록 집중 톤', bg: '#03171b', accent: '#14b8a6' },
+  { id: 'rose', name: '소프트 로즈', desc: '감성적인 로즈 핑크', bg: '#1a0812', accent: '#f43f5e' }
+];
+
+let currentTheme = localStorage.getItem('counter_theme') || 'default';
+
+function applyTheme(themeId, save = true) {
+  if (!THEMES.some(t => t.id === themeId)) {
+    themeId = 'default';
+  }
+  currentTheme = themeId;
+  if (themeId === 'default') {
+    document.documentElement.removeAttribute('data-theme');
+  } else {
+    document.documentElement.setAttribute('data-theme', themeId);
+  }
+
+  // 상단바(status bar) 메타 태그 색상 연동
+  const themeObj = THEMES.find(t => t.id === themeId);
+  const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+  if (metaThemeColor && themeObj) {
+    metaThemeColor.setAttribute('content', themeObj.bg);
+  }
+
+  if (save) {
+    localStorage.setItem('counter_theme', currentTheme);
+  }
+
+  renderThemeSelector();
+}
+
+function renderThemeSelector() {
+  const container = document.getElementById('themeSelector');
+  if (!container) return;
+
+  container.innerHTML = THEMES.map(t => {
+    const isActive = t.id === currentTheme;
+    return `
+      <div class="theme-card ${isActive ? 'active' : ''}" data-theme-id="${t.id}" role="button" tabindex="0">
+        <span class="theme-preview" style="background-color: ${t.bg};">
+          <span class="theme-preview-dot" style="background-color: ${t.accent};"></span>
+        </span>
+        <div class="theme-info">
+          <span class="theme-name">${t.name}</span>
+          <span class="theme-desc">${t.desc}</span>
+        </div>
+        ${isActive ? '<span class="theme-check">✓</span>' : ''}
+      </div>
+    `;
+  }).join('');
+
+  container.querySelectorAll('.theme-card').forEach(card => {
+    card.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const tId = card.dataset.themeId;
+      applyTheme(tId, true);
+      const themeObj = THEMES.find(t => t.id === tId);
+      if (themeObj) {
+        showToast(`🎨 "${themeObj.name}" 테마 적용됨`);
+      }
+    });
+  });
+}
+
+// 초기 테마 즉시 적용 (깜빡임 방지)
+applyTheme(currentTheme, false);
+
 // 탑승 및 하차 상태 분리 관리 (차내 인원 = 총 탑승 - 총 하차)
 let totalBoarding = parseInt(localStorage.getItem('counter_boarding') || localStorage.getItem('counter_val') || '0', 10);
 let totalAlighting = parseInt(localStorage.getItem('counter_alighting') || '0', 10);
@@ -878,6 +953,9 @@ function openSettingsModal() {
     inputCustomUnit.value = '';
   }
 
+  // 4. 화면 색상 테마 동기화
+  renderThemeSelector();
+
   settingsModal.classList.add('show');
 }
 
@@ -1714,6 +1792,9 @@ window.addEventListener('keydown', (e) => {
 
 // 초기화
 (async function init() {
+  // 테마 적용
+  applyTheme(currentTheme, false);
+
   // 기본 노선 자동 적용
   applyDefaultRoute();
 

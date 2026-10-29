@@ -1,9 +1,9 @@
-const CACHE_NAME = 'bus-counter-v14';
+const CACHE_NAME = 'bus-counter-v15';
 const ASSETS = [
   './',
   './index.html',
-  './style.css?v=14',
-  './app.js?v=14',
+  './style.css?v=15',
+  './app.js?v=15',
   './manifest.json',
   './icons/icon.svg',
   './icons/icon-192.png',

@@ -13,7 +13,7 @@
   <link rel="icon" type="image/svg+xml" href="icons/icon.svg">
   <link rel="apple-touch-icon" href="icons/icon-192.png">
   <title>버스 승차 카운터</title>
-  <link rel="stylesheet" href="style.css?v=14">
+  <link rel="stylesheet" href="style.css?v=15">
 </head>
 <body>
   <!-- 폭죽 파티클 캔버스 -->
@@ -248,6 +248,17 @@
               <input type="text" id="inputCustomUnit" class="setting-input" placeholder="단위 입력 (예: 건, 석, 명)" maxlength="6">
             </div>
           </div>
+
+          <!-- 4. 화면 색상 테마 설정 -->
+          <div class="setting-group">
+            <label class="setting-label">
+              <span>🎨 화면 색상 테마</span>
+              <span class="setting-subtext">주/야간 및 취향에 맞는 8가지 컬러 모드</span>
+            </label>
+            <div class="theme-grid" id="themeSelector">
+              <!-- JS 동적 렌더링 -->
+            </div>
+          </div>
         </div>
 
         <div class="modal-footer">
@@ -295,6 +306,6 @@
     <div class="toast" id="toast"></div>
   </div>
 
-  <script src="app.js?v=14"></script>
+  <script src="app.js?v=15"></script>
 </body>
 </html>
